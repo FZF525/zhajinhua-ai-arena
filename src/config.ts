@@ -66,7 +66,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     seenRate: 2,
     blindRate: 1,
     postCapRoundsToShowdown: 2,
-    maxRounds: 8,
+    maxRounds: 16,
     autoCompareWhenTwoLeft: false
   },
   exchange: { maxPerHand: 3, fees: [1, 3, 10], allowSelfReclaim: false },
