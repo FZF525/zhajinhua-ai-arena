@@ -552,6 +552,14 @@ function checkRoundEnd(state: GameState, nextSeat: number): boolean {
     settle(state, "SHOWDOWN");
     return true;
   }
+  // 安全阀:封顶要靠"一直加注抬到阶梯顶端"才会触发;如果全场都只跟注,M 永远停在起点,
+  // 于是上面的摊牌条件永远不成立 —— 牌局理论上可以无限打下去(实测 1250 轮还没结束)。
+  const maxRounds = state.config.betting.maxRounds;
+  if (maxRounds !== null && round + 1 >= maxRounds) {
+    emit(state, { kind: "ROUND_ENDED", roundIndex: round, multiplier: state.multiplier });
+    settle(state, "SHOWDOWN");
+    return true;
+  }
   state.betting.roundIndex = round + 1;
   state.betting.actedThisRound = [];
   state.betting.openingSeat = nextSeat;

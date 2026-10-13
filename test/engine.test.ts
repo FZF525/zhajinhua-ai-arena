@@ -497,3 +497,22 @@ function stepRandom(st: GameState, rng: { int: (n: number) => number }): StepRes
     default: return R(apply(st, { type: "FOLD", seat }), "FOLD(default)");
   }
 }
+
+test("E2E-22 全员只跟注也会结束:maxRounds 安全阀强制摊牌(防无限牌局)", () => {
+  const st = createGame(makeConfig({
+    players: { startPoints: 20000 },
+    endGame: { maxHands: 1, winAtOrAbove: 1e18, bustAtOrBelow: -1e18, winTakesPriorityOverBust: true }
+  }), ["A", "B", "C", "D"], 4242);
+  advance(st);
+  let steps = 0;
+  while (st.phase === "BETTING" && steps++ < 4000) {
+    const seat = st.turn.seat!;
+    const call = legalActions(st).includes("CALL") ? { type: "CALL", seat } as const : { type: "FOLD", seat } as const;
+    if (!apply(st, call, { dealNextHand: false }).ok) break;
+  }
+  assert.notEqual(st.phase, "BETTING", "全员跟注也必须能结束,不能挂死");
+  assert.ok(st.betting.roundIndex <= 8, "应在 maxRounds(8) 内收场,实际 " + st.betting.roundIndex);
+  assert.equal(st.settlement?.reason, "SHOWDOWN");
+  assert.equal(st.multiplier, 1, "没人加注时 M 应保持 1");
+  inv(st);
+});

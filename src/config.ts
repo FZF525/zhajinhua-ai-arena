@@ -13,6 +13,8 @@ export interface GameConfig {
     seenRate: number;
     blindRate: number;
     postCapRoundsToShowdown: number;
+    /** 下注轮上限(安全阀):全员长期不加注时 M 永远到不了封顶 → 打满它就强制摊牌,否则牌局可以无限打下去。null = 不限 */
+    maxRounds: number | null;
     autoCompareWhenTwoLeft: boolean;
   };
   exchange: { maxPerHand: number; fees: number[]; allowSelfReclaim: boolean };
@@ -64,6 +66,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     seenRate: 2,
     blindRate: 1,
     postCapRoundsToShowdown: 2,
+    maxRounds: 8,
     autoCompareWhenTwoLeft: false
   },
   exchange: { maxPerHand: 3, fees: [1, 3, 10], allowSelfReclaim: false },
