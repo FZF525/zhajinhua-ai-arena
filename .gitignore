@@ -14,3 +14,4 @@ Thumbs.db
 # 本地密钥(将来接 RemoteAgent 时用)
 .env
 .env.*
+\n# 密钥安全网:任何 key/token 文本都不要进仓库\n*key*.txt\n*key*.json\n*-key.*\n*token*.txt\n新建 文本文档.txt
