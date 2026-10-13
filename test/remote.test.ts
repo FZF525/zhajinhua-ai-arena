@@ -146,3 +146,18 @@ test("RM-06 端到端:LLM 座位按合法动作打完 2 局,不变量成立、�
   assert.equal(stats.violations, 0, "走合法动作时不应有违规");
   assert.ok(s.calls.length > 5, "应该真的调用过 LLM: " + s.calls.length);
 });
+
+test("RM-07 LLM 多回一个 reason 字段不应被判违规(否则真模型全会踩)", () => {
+  const st = fresh();
+  const legal = enumerateActions(st);
+  const call = legal.find((a) => a.type === "CALL")!;
+  const withReason = matchLegal({ type: "CALL", reason: "我先跟注看看" } as never, legal);
+  assert.deepEqual(withReason, call, "带 reason 的 CALL 应匹配上真正的 CALL");
+  const exchange = legal.find((a) => a.type === "EXCHANGE") as (typeof legal[number] & { takeCardId?: string; giveCardId?: string }) | undefined;
+  if (exchange) {
+    const r = matchLegal({ type: "EXCHANGE", takeCardId: exchange.takeCardId, giveCardId: exchange.giveCardId, reason: "换张好牌" } as never, legal);
+    assert.deepEqual(r, exchange, "带 reason 的换牌也应匹配");
+  }
+  // 参数错了仍然要拒绝
+  assert.equal(matchLegal({ type: "EXCHANGE", takeCardId: "X", giveCardId: "Y" } as never, legal.filter((a) => a.type === "EXCHANGE").length > 1 ? legal : []), null);
+});

@@ -47,6 +47,7 @@ const rec = createRecorder(SEED, names, {});
 const others = VS.map((n) => makeAgent(n));
 const rng = createRng(SEED * 7 + 11);
 const stats = newRemoteStats();
+const actionCount: Record<string, number> = {};
 const log: string[] = [];
 let steps = 0;
 const t0 = Date.now();
@@ -58,6 +59,7 @@ while (!state.gameOver && steps++ < 3000) {
   if (seat === seatOfLLM) {
     const r = await remoteDecide(cfg, state, seat, stats);
     action = r.action;
+    actionCount[action.type] = (actionCount[action.type] ?? 0) + 1;
     if (log.length < LOG) {
       log.push("第" + state.handNo + "局 座位" + seat + " 选择 " + JSON.stringify(action) +
         (r.info.violation ? "  ⚠ 违规(" + r.info.violation + ")→兜底" : "") + "  " + r.info.ms + "ms" +
@@ -79,6 +81,9 @@ console.log("座位 LLM vs " + VS.join(",") + "  " + state.handNo + " 局  种�
 console.log("积分: " + state.players.map((p, i) => names[i] + "=" + p.points + "(" + (p.points - start[i] >= 0 ? "+" : "") + (p.points - start[i]) + ")").join("  "));
 console.log("不变量: " + (checkInvariants(state).join(";") || "OK"));
 console.log("LLM 决策 " + stats.decisions + " 次,违规 " + stats.violations + " 次(" + JSON.stringify(stats.byViolation) + "),平均 " + (stats.totalMs / Math.max(1, stats.decisions)).toFixed(0) + "ms/步");
+const total = Object.values(actionCount).reduce((a, b) => a + b, 0) || 1;
+console.log("LLM 动作分布: " + Object.entries(actionCount).sort((a, b) => b[1] - a[1])
+  .map(([k, v]) => k + " " + v + "(" + Math.round((v / total) * 100) + "%)").join("  "));
 if (log.length) { console.log("\n--- 前 " + log.length + " 步决策 ---"); for (const l of log) console.log("  " + l); }
 try {
   const saved = saveReplay(rec, { hands: state.handNo, players: names, actions: rec.actions.length,

@@ -84,7 +84,14 @@ export function buildPrompt(state: GameState, seat: number, legal: Action[]): st
     lines.push("  " + i + ") " + JSON.stringify(clean));
   });
   lines.push("规则提示:比牌(COMPARE)付 2×费率×M 点名单挑,输者出局;踢牌(KICK)把一张明牌踢掉并补一张暗牌给自己,费用 8×M;换牌(EXCHANGE)付 1×M 换池中一张明牌。");
-  lines.push('只回一个 JSON,不要解释。格式:{"action":"CALL"} 或 {"action":"EXCHANGE","takeCardId":"HEART-2","giveCardId":"SPADE-7"} 或 {"action":"COMPARE","targetSeat":1}。action 必须是上面列表里的类型,参数必须用上面列表里的 id。');
+  lines.push("决策要点:");
+  lines.push("  1) 如果你还闷牌,先用 VIEW_HAND 看自己的牌(免费;代价是之后跟注从半价变全价)—— 不知道牌力就是在赌博;");
+  lines.push("  2) 看完牌再判断:牌力弱(高牌/一对且对手很强)而跟注成本超过底池的 1/3,就 FOLD;");
+  lines.push("  3) 牌力强(顺子及以上)可以 RAISE 施压,或在底池已有分量时用 COMPARE 直接结算;");
+  lines.push("  4) 对手多(3 家以上)时,烂牌一路跟注到底是最亏的打法;");
+  lines.push("  5) 换牌(EXCHANGE)只要 1×M,能明显提升牌力就值得。");
+  lines.push('回一个 JSON,先写一句理由再给动作,例如:{"reason":"我还没看牌,先看牌","action":"VIEW_HAND"}。');
+  lines.push('action 必须是上面列表里的类型,参数必须用上面列表里的 id。');
   return lines.join("\n");
 }
 
@@ -118,10 +125,21 @@ export function parseAction(raw: string): Action | null {
   return null;
 }
 
-/** 与合法动作比对(类型 + 参数都要对得上) */
+/** 每个动作真正有意义的字段:LLM 多回的 reason/解释 一律忽略,否则会被误判成违规 */
+const ACTION_FIELDS: Record<string, string[]> = {
+  VIEW_HAND: [], CALL: [], FOLD: [], PASS_BLOCKED: [], DECLINE_INTERCEPT: [],
+  RAISE: ["toMultiplier"], COMPARE: ["targetSeat"], EXCHANGE: ["takeCardId", "giveCardId"],
+  KICK: ["targetCardId"], TAKE_BLOCKED: ["giveCardId"], INTERCEPT: ["giveCardId"]
+};
+
 export function matchLegal(candidate: Action | null, legal: Action[]): Action | null {
   if (!candidate) return null;
-  const key = (a: Action) => JSON.stringify(Object.entries(a as Record<string, unknown>).filter(([k]) => k !== "seat").sort());
+  const key = (a: Action) => {
+    const fields = ACTION_FIELDS[a.type] ?? [];
+    const o: Record<string, unknown> = { type: a.type };
+    for (const f of fields) o[f] = (a as Record<string, unknown>)[f];
+    return JSON.stringify(o);
+  };
   const want = key(candidate);
   const hit = legal.find((a) => key(a) === want);
   if (hit) return hit;
