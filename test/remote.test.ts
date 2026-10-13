@@ -161,3 +161,19 @@ test("RM-07 LLM 多回一个 reason 字段不应被判违规(否则真模型全�
   // 参数错了仍然要拒绝
   assert.equal(matchLegal({ type: "EXCHANGE", takeCardId: "X", giveCardId: "Y" } as never, legal.filter((a) => a.type === "EXCHANGE").length > 1 ? legal : []), null);
 });
+
+test("RM-08 思考型模型:正文为空时报 empty(带 finish_reason),只有推理内容时也能抽出来", async () => {
+  const st = fresh();
+  const seat = st.turn.seat!;
+  // (a) 完全空正文 + finish_reason=length → 明确的 empty 诊断
+  const emptyImpl = (async () => new Response(JSON.stringify({ choices: [{ finish_reason: "length", message: { content: "" } }] }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+  const r1 = await remoteDecide(cfgWith(emptyImpl), st, seat, newRemoteStats());
+  assert.equal(r1.info.violation, "empty");
+  assert.equal(r1.info.finishReason, "length");
+  assert.equal(r1.action.type, "FOLD", "兜底仍是合法动作");
+
+  // (b) 正文为空但推理里有动作 → 抽出来用
+  const reasoningImpl = (async () => new Response(JSON.stringify({ choices: [{ message: { content: "", reasoning_content: '先看牌。{\\"action\\":\\"VIEW_HAND\\"}' } }] }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+  const r2 = await remoteDecide(cfgWith(reasoningImpl), st, seat, newRemoteStats());
+  assert.equal(r2.info.raw.includes("VIEW_HAND"), true);
+});

@@ -32,6 +32,7 @@ const cfg: RemoteConfig = {
   apiKey: process.env.LLM_API_KEY,
   temperature: Number(arg("temp", process.env.LLM_TEMP ?? "0")),
   timeoutMs: Number(arg("timeout", process.env.LLM_TIMEOUT ?? "30000")),
+  maxTokens: Number(arg("max-tokens", process.env.LLM_MAX_TOKENS ?? "200")),
   fallback: (arg("fallback", process.env.LLM_FALLBACK ?? "fold") as "fold" | "call" | "heuristic")
 };
 
@@ -62,7 +63,7 @@ while (!state.gameOver && steps++ < 3000) {
     actionCount[action.type] = (actionCount[action.type] ?? 0) + 1;
     if (log.length < LOG) {
       log.push("第" + state.handNo + "局 座位" + seat + " 选择 " + JSON.stringify(action) +
-        (r.info.violation ? "  ⚠ 违规(" + r.info.violation + ")→兜底" : "") + "  " + r.info.ms + "ms" +
+        (r.info.violation ? "  ⚠ 违规(" + r.info.violation + (r.info.finishReason ? "/" + r.info.finishReason : "") + ")→兜底" : "") + "  " + r.info.ms + "ms" +
         (r.info.raw ? "  LLM原话:" + r.info.raw.replace(/\s+/g, " ").slice(0, 60) : ""));
     }
     if (SHOW_PROMPT && log.length === 1) console.log("\n=== 发给 LLM 的 prompt(第一次)===\n" + r.info.prompt + "\n=== end ===\n");
@@ -82,6 +83,7 @@ console.log("积分: " + state.players.map((p, i) => names[i] + "=" + p.points +
 console.log("不变量: " + (checkInvariants(state).join(";") || "OK"));
 console.log("LLM 决策 " + stats.decisions + " 次,违规 " + stats.violations + " 次(" + JSON.stringify(stats.byViolation) + "),平均 " + (stats.totalMs / Math.max(1, stats.decisions)).toFixed(0) + "ms/步");
 const total = Object.values(actionCount).reduce((a, b) => a + b, 0) || 1;
+console.log("token 用量: 输入 " + stats.inputTokens + " / 输出 " + stats.outputTokens + " (合计 " + (stats.inputTokens + stats.outputTokens) + ")");
 console.log("LLM 动作分布: " + Object.entries(actionCount).sort((a, b) => b[1] - a[1])
   .map(([k, v]) => k + " " + v + "(" + Math.round((v / total) * 100) + "%)").join("  "));
 if (log.length) { console.log("\n--- 前 " + log.length + " 步决策 ---"); for (const l of log) console.log("  " + l); }

@@ -41,7 +41,9 @@ export interface RemoteDecisionInfo {
   action: Action | null;
   legal: number;
   ms: number;
-  violation?: "timeout" | "parse" | "illegal" | "http";
+  violation?: "timeout" | "parse" | "illegal" | "http" | "empty";
+  /** 供诊断:模型为什么没给正文(比如思考型模型 token 用尽) */
+  finishReason?: string;
 }
 
 export interface RemoteStats {
@@ -50,10 +52,13 @@ export interface RemoteStats {
   timeouts: number;
   totalMs: number;
   byViolation: Record<string, number>;
+  /** token 用量(便于盯成本) */
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export function newRemoteStats(): RemoteStats {
-  return { decisions: 0, violations: 0, timeouts: 0, totalMs: 0, byViolation: {} };
+  return { decisions: 0, violations: 0, timeouts: 0, totalMs: 0, byViolation: {}, inputTokens: 0, outputTokens: 0 };
 }
 
 /** 把"该座位能看到的信息"渲染成给 LLM 的文本(不含任何隐藏信息) */
@@ -205,6 +210,7 @@ export async function remoteDecide(cfg: RemoteConfig, state: GameState, seat: nu
   const prompt = buildPrompt(state, seat, legal);
   const t0 = Date.now();
   let raw = "";
+  let finishReason = "";
   let violation: RemoteDecisionInfo["violation"];
   try {
     const key = cfg.apiKey ?? (cfg.apiKeyEnv ? process.env[cfg.apiKeyEnv] : undefined);
@@ -224,8 +230,25 @@ export async function remoteDecide(cfg: RemoteConfig, state: GameState, seat: nu
         signal: ctrl.signal
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
-      const body = await res.json() as { choices?: Array<{ message?: { content?: string } }>; message?: { content?: string } };
-      raw = body.choices?.[0]?.message?.content ?? body.message?.content ?? "";
+      const body = await res.json() as {
+        choices?: Array<{ message?: { content?: string; reasoning_content?: string }; finish_reason?: string }>;
+        message?: { content?: string; reasoning_content?: string };
+      };
+      const msg = body.choices?.[0]?.message ?? body.message ?? {};
+      finishReason = body.choices?.[0]?.finish_reason ?? "";
+      raw = msg.content ?? "";
+      // 思考型模型(如 deepseek-v4-pro)常把内容放进 reasoning_content;
+      // 若 max_tokens 太小,推理会把额度吃光,正文干脆是空的 —— 这时给个明确的诊断而不是笼统的 parse 失败
+      if (!raw.trim() && (msg.reasoning_content ?? "").trim()) {
+        raw = msg.reasoning_content ?? "";
+        finishReason = (finishReason || "reasoning_only") + "(仅推理)";
+      }
+      if (!raw.trim()) violation = "empty";
+      const usage = (body as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+      if (usage) {
+        s.inputTokens += usage.prompt_tokens ?? 0;
+        s.outputTokens += usage.completion_tokens ?? 0;
+      }
     } finally { clearTimeout(timer); }
   } catch (e) {
     violation = (e as Error).name === "AbortError" ? "timeout" : "http";
@@ -244,7 +267,7 @@ export async function remoteDecide(cfg: RemoteConfig, state: GameState, seat: nu
   s.decisions++;
   const ms = Date.now() - t0;
   s.totalMs += ms;
-  const info: RemoteDecisionInfo = { seat, prompt, raw, action, legal: legal.length, ms, violation };
+  const info: RemoteDecisionInfo = { seat, prompt, raw, action, legal: legal.length, ms, violation, finishReason };
   cfg.onDecision?.(info);
   return { action, info };
 }
