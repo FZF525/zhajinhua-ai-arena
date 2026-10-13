@@ -31,10 +31,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/<你的用户名>/zhajinhua-ai-arena.git"
+    "url": "git+https://github.com/FZF525/zhajinhua-ai-arena.git"
   },
-  "homepage": "https://github.com/<你的用户名>/zhajinhua-ai-arena#readme",
+  "homepage": "https://github.com/FZF525/zhajinhua-ai-arena#readme",
   "bugs": {
-    "url": "https://github.com/<你的用户名>/zhajinhua-ai-arena/issues"
-  }
+    "url": "https://github.com/FZF525/zhajinhua-ai-arena/issues"
+  },
+  "author": "FZF525"
 }

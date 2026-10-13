@@ -1,8 +1,26 @@
 
 # 五张牌炸金花变体 · 积分制规则引擎
 
-纯积分制娱乐游戏引擎(104 张牌 / 8 花色 / 4 色系),TypeScript + Node.js,**零第三方依赖**。
-核心引擎与 UI 分离,全部费用、上限、阈值、牌型排序均可配置。
+纯积分制娱乐游戏引擎(104 张牌 / 8 花色 / 4 色系),TypeScript + Node.js,**零第三方依赖**;核心引擎与 UI 分离,费用 / 上限 / 阈值 / 牌型排序全部可配置,并附带一个现成的 **AI 擂台**。
+
+[![CI](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml)
+![tests](https://img.shields.io/badge/tests-97%20passed-brightgreen)
+![node](https://img.shields.io/badge/node-%E2%89%A522.18-blue)
+![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-blue)
+
+- 🎴 **规则引擎**:104 张牌(13 级 × 8 花色)/ 12 档牌型 / 闷牌看牌 / 比牌 / 踢牌封锁轮 / 挂起式截胡
+- 🧠 **10 个内置 AI**:规则型 3 + 蒙特卡洛 3 + 精确胜率 3 + 自对弈学习 1
+- 🏟️ **AI 擂台**:循环赛排名 / 单点基准 / 上帝视角观战 / 时间轴回放 / 对局存档
+- ⚡ **零依赖零构建**:Node ≥ 22.18 直接跑 `.ts`,clone 完 10 秒内能跑测试
+- 📊 **诚实实测**:包括失败结论 —— "算得最准"的 AI 排名垫底,原因写在文档里
+
+```bash
+git clone https://github.com/FZF525/zhajinhua-ai-arena.git && cd zhajinhua-ai-arena
+node src/cli.ts --ai=human,Sam,May     # 命令行:你 + 2 个 AI
+node web/server.ts                     # 浏览器:玩 / 观战 / 回放
+node examples/tournament.ts 3 5        # 10 个 AI 循环赛排名
+```
 
 > **合规声明**:本项目为纯积分娱乐,不涉及真钱,不提供充值 / 提现 / 现金兑换 / 抽水,也不支持真钱模式。
 
@@ -24,7 +42,7 @@ kick/blockade rounds, head-to-head compares — plus a ready-made **AI arena**.
   (see the arena section). In this variant, discipline beats deep calculation.
 
 ```bash
-git clone <this-repo> && cd zhajinhua-ai-arena
+git clone https://github.com/FZF525/zhajinhua-ai-arena.git && cd zhajinhua-ai-arena
 node src/cli.ts --ai=human,Sam,May     # 你坐 0 号,其余交给 AI
 node web/server.ts                     # 浏览器:玩 / 观战 / 回放(默认 http://127.0.0.1:8787)
 node examples/tournament.ts 3 5        # 10 个 AI 循环赛排名
