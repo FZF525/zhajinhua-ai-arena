@@ -25,12 +25,14 @@ const SHOW_PROMPT = arg("show-prompt", "0") === "1";
 
 const cfg: RemoteConfig = {
   name: "LLM",
-  endpoint: process.env.LLM_ENDPOINT ?? "http://127.0.0.1:11434/v1/chat/completions",
-  model: process.env.LLM_MODEL ?? "mock",
+  // 命令行优先,其次环境变量,最后是本地 mock
+  endpoint: arg("endpoint", process.env.LLM_ENDPOINT ?? "http://127.0.0.1:11434/v1/chat/completions"),
+  model: arg("model", process.env.LLM_MODEL ?? "mock"),
   apiKeyEnv: "LLM_API_KEY",
-  temperature: Number(process.env.LLM_TEMP ?? "0"),
-  timeoutMs: Number(process.env.LLM_TIMEOUT ?? "30000"),
-  fallback: (process.env.LLM_FALLBACK as "fold" | "call" | "heuristic") ?? "fold"
+  apiKey: process.env.LLM_API_KEY,
+  temperature: Number(arg("temp", process.env.LLM_TEMP ?? "0")),
+  timeoutMs: Number(arg("timeout", process.env.LLM_TIMEOUT ?? "30000")),
+  fallback: (arg("fallback", process.env.LLM_FALLBACK ?? "fold") as "fold" | "call" | "heuristic")
 };
 
 const names = ["LLM", ...VS];
@@ -72,6 +74,7 @@ while (!state.gameOver && steps++ < 3000) {
 }
 
 console.log("=== 对局结束 ===");
+console.log("目标:" + cfg.endpoint + "  模型:" + cfg.model + (process.env.LLM_API_KEY || process.env.LLM_API_KEY === "" ? "  (带 key)" : "  (无 key)"));
 console.log("座位 LLM vs " + VS.join(",") + "  " + state.handNo + " 局  种子 " + SEED + "  用时 " + ((Date.now() - t0) / 1000).toFixed(1) + "s");
 console.log("积分: " + state.players.map((p, i) => names[i] + "=" + p.points + "(" + (p.points - start[i] >= 0 ? "+" : "") + (p.points - start[i]) + ")").join("  "));
 console.log("不变量: " + (checkInvariants(state).join(";") || "OK"));
