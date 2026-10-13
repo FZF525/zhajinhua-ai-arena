@@ -546,6 +546,19 @@ LLM_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions LLM_MODEL=qwen2.5:7b \
 
 **成本参考**:一手牌约 10~30 次调用,prompt 约 400 token;用本地模型是 0 成本,云 API 一手牌大约几分钱。
 
+### 人也能上场:逐步式会话
+
+`examples/agent-session.ts` 是"人在环"的版本 —— 每敲一次命令推进到轮到你,你自己做决定。
+它只存 `{种子, 动作序列}`(约 1 KB),每次调用重放重建局面,所以状态永远可复现、可回放。
+
+```bash
+node examples/agent-session.ts --new --vs=Sam,May --seed=777      # 开一局,推进到轮到我
+node examples/agent-session.ts --action-file=data/my-action.json  # 我的一步(JSON 写文件,免 shell 转义)
+node examples/agent-session.ts --status                           # 只看当前局面
+```
+
+> 注意:闷牌状态下工具**不会**给你看自己的牌 —— 和外部 LLM 拿到的视图保持一致(不然就是作弊)。
+
 ## AI 擂台(斗蛐蛐)
 
 任何 AI 只要实现 `(state, rng) => Action`、放进 `src/ai/` 并在 `index.ts` 注册,就自动出现在 CLI、Web 座位下拉、`/api/agents`、擂台上。
