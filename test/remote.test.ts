@@ -60,7 +60,9 @@ test("RM-02 解析:裸 JSON / 代码块 / 夹带解释 都能抽出来;垃圾返
   assert.deepEqual(parseAction('\u0060\u0060\u0060json\n{"action":"FOLD"}\n\u0060\u0060\u0060'), { type: "FOLD" });
   assert.deepEqual(parseAction('我认为应该跟注。{"action":"CALL","seat":2} 完毕'), { type: "CALL", seat: 2 });
   assert.equal(parseAction("我不知道该怎么办"), null);
-  assert.equal(parseAction('{"noop":1}'), null);
+  // 新增形状推断后,{"noop":1} 会变成一个"没有动作名"的候选 —— 但它必须在合法性校验那关被拒
+  const bogus = parseAction('{"noop":1}');
+  assert.equal(matchLegal(bogus, enumerateActions(fresh())), null, "字段对不上任何合法动作 → 必须拒绝");
 });
 
 test("RM-03 合法性:参数不对不放过;唯一候选时可救;未知类型拒绝", () => {
@@ -176,4 +178,41 @@ test("RM-08 思考型模型:正文为空时报 empty(带 finish_reason),只有�
   const reasoningImpl = (async () => new Response(JSON.stringify({ choices: [{ message: { content: "", reasoning_content: '先看牌。{\\"action\\":\\"VIEW_HAND\\"}' } }] }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
   const r2 = await remoteDecide(cfgWith(reasoningImpl), st, seat, newRemoteStats());
   assert.equal(r2.info.raw.includes("VIEW_HAND"), true);
+});
+
+test("RM-09 参数被嵌进 action / 缺动作名:用字段形状反推(救回 v4-pro 那类回复)", () => {
+  const st = fresh();
+  const legal = enumerateActions(st);
+  const ex = legal.find((a) => a.type === "EXCHANGE") as (typeof legal[number] & { takeCardId?: string; giveCardId?: string }) | undefined;
+  if (ex) {
+    // 真实模型写法:{"reason":"…","action":{"takeCardId":…,"giveCardId":…}}
+    const nested = parseAction(JSON.stringify({ reason: "换这张能变两对", action: { takeCardId: ex.takeCardId, giveCardId: ex.giveCardId } }));
+    assert.ok(nested, "应该能解析出半成品动作");
+    assert.deepEqual(matchLegal(nested, legal), ex, "应按字段形状唯一匹配到那手换牌");
+  }
+  // action 里带 type 的嵌套写法
+  assert.deepEqual(parseAction('{"action":{"type":"CALL"}}'), { type: "CALL" });
+  // 只有 reason、没有参数 → 解析失败(不硬猜)
+  assert.equal(parseAction('{"reason":"我再想想"}'), null);
+  // 参数对不上任何合法动作 → 不匹配
+  assert.equal(matchLegal(parseAction('{"action":{"takeCardId":"NOT-A-CARD","giveCardId":"NOPE"}}'), legal), null);
+});
+
+test("RM-10 prompt 自洽:system 不能要求'不要解释'而 user 又要求'先写理由'(否则模型会卡在这条矛盾上烧光 token)", async () => {
+  const st = fresh();
+  const seat = st.turn.seat!;
+  let systemContent = "";
+  let userContent = "";
+  const spy = (async (_u: unknown, init: { body?: string }) => {
+    const b = JSON.parse(String(init.body ?? "{}")) as { messages: Array<{ role: string; content: string }> };
+    systemContent = b.messages.find((m) => m.role === "system")?.content ?? "";
+    userContent = b.messages.find((m) => m.role === "user")?.content ?? "";
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"action":"CALL"}' } }] }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+  await remoteDecide(cfgWith(spy), st, seat, newRemoteStats());
+  assert.ok(systemContent.length > 0 && userContent.length > 0);
+  const userWantsReason = userContent.includes("reason");
+  const sysForbids = /不要(输出)?任何解释|不要解释/.test(systemContent);
+  assert.equal(userWantsReason && sysForbids, false, "system 与 user 指令矛盾:user 要理由,system 却禁止解释");
+  assert.ok(systemContent.includes("reason"), "system 应明确允许 reason");
 });

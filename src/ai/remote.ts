@@ -104,11 +104,24 @@ export function buildPrompt(state: GameState, seat: number, legal: Action[]): st
 export function parseAction(raw: string): Action | null {
   const text = raw.trim();
   /** 统一成引擎内部格式:{type, ...} —— 兼容 LLM 常见的 {"action":"CALL"} 写法 */
+  const IGNORED = new Set(["reason", "comment", "explanation", "analysis", "why", "seat"]);
   const normalize = (o: unknown): Action | null => {
     if (!o || typeof o !== "object") return null;
-    const src = o as Record<string, unknown>;
+    let src: Record<string, unknown> = { ...(o as Record<string, unknown>) };
+    // 真实模型常把参数嵌进 action,例如 {"reason":"…","action":{"takeCardId":"X","giveCardId":"Y"}}
+    if (src.action && typeof src.action === "object") {
+      const inner = src.action as Record<string, unknown>;
+      delete src.action;
+      src = { ...src, ...inner };
+    }
     const t = src.type ?? src.action;
-    if (typeof t !== "string") return null;
+    if (typeof t !== "string") {
+      // 连动作名都没给:只保留参数,交给 matchLegal 用"字段形状"去合法动作里唯一匹配
+      const params: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(src)) if (!IGNORED.has(k) && k !== "type") params[k] = v;
+      if (Object.keys(params).length === 0) return null;
+      return { ...params, type: "" } as unknown as Action;
+    }
     const out: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(src)) if (k !== "action") out[k] = val;
     out.type = t;
@@ -139,6 +152,14 @@ const ACTION_FIELDS: Record<string, string[]> = {
 
 export function matchLegal(candidate: Action | null, legal: Action[]): Action | null {
   if (!candidate) return null;
+  // 没有动作名 → 用字段形状推断:唯一一个"参数完全对得上"的合法动作就是它
+  if (!candidate.type) {
+    const provided = Object.entries(candidate as unknown as Record<string, unknown>)
+      .filter(([k, v]) => k !== "type" && k !== "seat" && v !== undefined);
+    if (provided.length === 0) return null;
+    const hits = legal.filter((a) => provided.every(([k, v]) => (a as unknown as Record<string, unknown>)[k] === v));
+    return hits.length === 1 ? hits[0] : null;
+  }
   const key = (a: Action) => {
     const fields = ACTION_FIELDS[a.type] ?? [];
     const o: Record<string, unknown> = { type: a.type };
@@ -170,7 +191,7 @@ export function makeRemoteAgent(cfg: RemoteConfig): Policy {
         body: JSON.stringify({
           model: cfg.model, temperature, max_tokens: cfg.maxTokens ?? 200,
           messages: [
-            { role: "system", content: "你是一个扑克 AI。只输出 JSON 动作,不要输出任何解释。" },
+            { role: "system", content: "你是一个 5 张炸金花的扑克 AI。回一个 JSON 对象,先写一句简短 reason 再给 action,不要在 JSON 之外写任何东西。" },
             { role: "user", content: prompt }
           ]
         }),
@@ -223,7 +244,7 @@ export async function remoteDecide(cfg: RemoteConfig, state: GameState, seat: nu
         body: JSON.stringify({
           model: cfg.model, temperature: cfg.temperature ?? 0, max_tokens: cfg.maxTokens ?? 200,
           messages: [
-            { role: "system", content: "你是一个扑克 AI。只输出 JSON 动作,不要输出任何解释。" },
+            { role: "system", content: "你是一个 5 张炸金花的扑克 AI。回一个 JSON 对象,先写一句简短 reason 再给 action,不要在 JSON 之外写任何东西。" },
             { role: "user", content: prompt }
           ]
         }),
