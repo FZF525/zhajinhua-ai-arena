@@ -5,14 +5,16 @@
   "type": "module",
   "description": "纯积分制 5 张炸金花(12 档牌型 / 104 张牌)规则引擎 + AI 擂台:10 个内置 AI(规则型 / 蒙特卡洛 / 精确胜率 / 自对弈学习),零依赖零构建",
   "scripts": {
-    "test": "node --test test/deck.test.ts test/evaluator.test.ts test/exhaustive.test.ts test/config.test.ts test/web-html.test.ts test/view.test.ts test/ai.test.ts test/equity.test.ts test/replay.test.ts test/store.test.ts test/engine.test.ts",
+    "test": "node --test test/deck.test.ts test/evaluator.test.ts test/exhaustive.test.ts test/config.test.ts test/web-html.test.ts test/view.test.ts test/ai.test.ts test/equity.test.ts test/remote.test.ts test/replay.test.ts test/store.test.ts test/engine.test.ts",
     "test:exhaustive": "node --test test/exhaustive.test.ts",
     "play": "node src/cli.ts",
     "web": "node web/server.ts",
     "demo": "node src/cli.ts --demo",
     "selftest": "node src/cli.ts --selftest",
     "bench": "node examples/ai-bench.ts",
-    "train:zerob": "node examples/zerob-train.ts"
+    "train:zerob": "node examples/zerob-train.ts",
+    "llm:mock": "node examples/mock-llm.ts",
+    "llm:duel": "node examples/llm-duel.ts"
   },
   "engines": {
     "node": ">=22.18"

@@ -275,6 +275,7 @@ zhajinhua/
     ai/
       heuristic.ts                                   # Baozi / Sam / Lucas
       montecarlo.ts                                  # May / Yeon / Brian
+      remote.ts                                      # 外部 AI(LLM)入口:视图隔离 + 动作校验
       equity.ts                                      # EQB(精确胜率)
       learning.ts                                    # ZeroB(自对弈 Q 学习)
       index.ts                                       # 角色注册表
@@ -502,6 +503,39 @@ export const makeMyBot = (): Policy => (state: GameState, rng) => {
 - **只动自己的动作**:不得修改 `state`;返回的必须是 `enumerateActions()` 里的合法动作。
 - **可复现**:随机数只用传入的 `rng`,不要用 `Math.random()` —— 这样同种子可复现、可回放。
 - 非法动作 / 超时 / 越权读牌 = 判负。
+
+
+## 让 LLM 上场(外部 AI 入口)
+
+任何外部模型都能占一个座位来打 —— 包括 ChatGPT / DeepSeek / 通义,或者本地跑的 Ollama。
+
+**设计要点**:
+
+- **公平隔离**:发给模型的是 `buildView(state, true, { viewer: seat })` 的裁剪结果 —— 它**看不到**别人的手牌、牌堆、未公开暗牌(有 `RM-01` 用例专门盯着这句话)。
+- **协议**:OpenAI 兼容的 `/v1/chat/completions`;模型只需回一个 JSON,如 `{"action":"CALL"}` 或 `{"action":"EXCHANGE","takeCardId":"HEART-2","giveCardId":"SPADE-7"}`。
+- **违规有账**:超时 / 解析失败 / 非法动作 → 记一笔并走兜底(默认弃牌),结果里打印违规次数,不做"悄悄帮它圆过去"。
+- **免费可测**:`examples/mock-llm.ts` 是本地 mock,零成本跑通整条链路。
+
+```bash
+# 终端 1:本地 mock(免费,不联网)
+node examples/mock-llm.ts
+
+# 终端 2:让 LLM 座位去跟内置 AI 打
+node examples/llm-duel.ts --vs=Sam,May --hands=6
+node examples/llm-duel.ts --vs=Baozi,Brian --hands=8 --log=20       # 打印每步决策与原话
+
+# 接真模型(任意 OpenAI 兼容服务)
+LLM_ENDPOINT=https://api.deepseek.com/v1/chat/completions LLM_MODEL=deepseek-chat LLM_API_KEY=sk-xxx \
+  node examples/llm-duel.ts --vs=Sam,May --hands=6
+
+# 本地 Ollama(完全免费、不联网)
+LLM_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions LLM_MODEL=qwen2.5:7b \
+  node examples/llm-duel.ts --vs=Sam,May --hands=6
+```
+
+**实测**(mock 对手 Sam,May,4 局):`LLM 决策 68 次,违规 0 次,平均 31ms/步`,对局自动存档、可回放。
+
+**成本参考**:一手牌约 10~30 次调用,prompt 约 400 token;用本地模型是 0 成本,云 API 一手牌大约几分钱。
 
 ## AI 擂台(斗蛐蛐)
 
