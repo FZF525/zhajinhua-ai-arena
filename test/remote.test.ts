@@ -216,3 +216,21 @@ test("RM-10 prompt 自洽:system 不能要求'不要解释'而 user 又要求'�
   assert.equal(userWantsReason && sysForbids, false, "system 与 user 指令矛盾:user 要理由,system 却禁止解释");
   assert.ok(systemContent.includes("reason"), "system 应明确允许 reason");
 });
+
+test("RM-11 json-mode:开启后请求体要带 response_format=json_object(专治分析被截断)", async () => {
+  const st = fresh();
+  const seat = st.turn.seat!;
+  let body: Record<string, unknown> = {};
+  const spy = (async (_u: unknown, init: { body?: string }) => {
+    body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"action":"CALL"}' } }] }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+  await remoteDecide(cfgWith(spy, { jsonMode: true }), st, seat, newRemoteStats());
+  assert.deepEqual(body.response_format, { type: "json_object" });
+  const spy2 = (async (_u: unknown, init: { body?: string }) => {
+    body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"action":"CALL"}' } }] }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+  await remoteDecide(cfgWith(spy2), st, seat, newRemoteStats());
+  assert.equal(body.response_format, undefined, "没开启时不应带上");
+});

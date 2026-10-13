@@ -33,6 +33,7 @@ const cfg: RemoteConfig = {
   temperature: Number(arg("temp", process.env.LLM_TEMP ?? "0")),
   timeoutMs: Number(arg("timeout", process.env.LLM_TIMEOUT ?? "30000")),
   maxTokens: Number(arg("max-tokens", process.env.LLM_MAX_TOKENS ?? "200")),
+  jsonMode: arg("json-mode", process.env.LLM_JSON_MODE ?? "0") === "1",
   fallback: (arg("fallback", process.env.LLM_FALLBACK ?? "fold") as "fold" | "call" | "heuristic")
 };
 

@@ -28,6 +28,8 @@ export interface RemoteConfig {
   fallback?: "fold" | "call" | "heuristic";
   /** 每步的思考预算(部分服务支持) */
   maxTokens?: number;
+  /** 开启 JSON 模式(response_format: json_object):强制模型只吐 JSON,专治"写长篇分析被截断" */
+  jsonMode?: boolean;
   /** 可注入的 fetch(测试用) */
   fetchImpl?: typeof fetch;
   /** 每步回调:便于打印/记录 LLM 的原始回答 */
@@ -190,6 +192,7 @@ export function makeRemoteAgent(cfg: RemoteConfig): Policy {
         headers: { "content-type": "application/json", ...(key ? { authorization: "Bearer " + key } : {}) },
         body: JSON.stringify({
           model: cfg.model, temperature, max_tokens: cfg.maxTokens ?? 200,
+          ...(cfg.jsonMode ? { response_format: { type: "json_object" } } : {}),
           messages: [
             { role: "system", content: "你是一个 5 张炸金花的扑克 AI。回一个 JSON 对象,先写一句简短 reason 再给 action,不要在 JSON 之外写任何东西。" },
             { role: "user", content: prompt }
@@ -243,6 +246,7 @@ export async function remoteDecide(cfg: RemoteConfig, state: GameState, seat: nu
         headers: { "content-type": "application/json", ...(key ? { authorization: "Bearer " + key } : {}) },
         body: JSON.stringify({
           model: cfg.model, temperature: cfg.temperature ?? 0, max_tokens: cfg.maxTokens ?? 200,
+          ...(cfg.jsonMode ? { response_format: { type: "json_object" } } : {}),
           messages: [
             { role: "system", content: "你是一个 5 张炸金花的扑克 AI。回一个 JSON 对象,先写一句简短 reason 再给 action,不要在 JSON 之外写任何东西。" },
             { role: "user", content: prompt }
