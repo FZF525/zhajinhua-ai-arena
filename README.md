@@ -22,6 +22,8 @@ node web/server.ts                     # 浏览器:玩 / 观战 / 回放
 node examples/tournament.ts 3 5        # 10 个 AI 循环赛排名
 ```
 
+![牌桌:6 人局 · 公共池 7 张明牌 · 座位可任选 10 个 AI · 弃牌者亮牌](docs/screenshot.jpeg)
+
 > **合规声明**:本项目为纯积分娱乐,不涉及真钱,不提供充值 / 提现 / 现金兑换 / 抽水,也不支持真钱模式。
 
 ---
@@ -257,8 +259,6 @@ node examples/zerob-train.ts 8 800 8 6 2     # 代数 每代手数 评估场次 
 **内存**:回放**不缓存任何帧**,每次跳转都从种子重算(实测 **0.48 ms/帧**;连续拖 30 次含 HTTP 往返共 123 ms),所以常驻内存只有"当前一帧"约 20 KB + 录制文件 20~35 KB。相比之下"每步存一帧"的实现要 7.6 MB/局(20 局就 150 MB)——这就是为什么这样实现。见 `examples/memory-probe.ts`。
 
 相关接口:`POST /api/replay/save`、`GET /api/replays`、`GET /api/replay/load?file=`、`GET /api/replay/frame?file=&step=`、`DELETE /api/replay?file=`、`GET /api/state?god=1`、`POST /api/step {god:true}`。
-
-> **想让 README 更醒目**:截一张牌桌图放到 `docs/screenshot.png`,然后在上面「三种用法」小节里贴 `![牌桌](docs/screenshot.png)`。
 
 ## 目录结构
 
