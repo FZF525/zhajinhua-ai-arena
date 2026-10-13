@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # 零依赖:不需要 npm install,直接跑原生 TypeScript
+      - name: 单元 + 端到端用例
+        run: npm test
+      - name: 引擎自测(随机对战 + 不变量)
+        run: node src/cli.ts --selftest --games=8 --steps=800
+      - name: AI 冒烟(10 个角色各打一局)
+        run: node examples/quickstart.ts

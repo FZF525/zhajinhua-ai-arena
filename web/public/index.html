@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>炸金花 · 积分制(12 档)</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="curtain" class="curtain hidden">
+  <div class="curtain-card">
+    <div class="curtain-title">请把设备交给 <b id="curtain-actor">—</b></div>
+    <div class="curtain-sub" id="curtain-sub">其他人请回避</div>
+    <button class="primary" id="curtain-go">我准备好了</button>
+  </div>
+</div>
+
+<header>
+  <div class="brand">炸金花 · 积分制 <span class="tag">12 档</span></div>
+  <div class="meta" id="meta"></div>
+  <div class="controls">
+    <span class="ctl">人数
+      <span id="players" class="seg" title="人数"></span>
+    </span>
+    <select id="table" title="分场">
+      <option value="auto" selected>自适应分场</option>
+      <option value="small">小分场 ×10</option>
+      <option value="big">大分场 ×25</option>
+    </select>
+    <label class="ctl"><input type="checkbox" id="god"> 上帝视角</label>
+    <label class="ctl" title="多人同屏轮流玩时才需要:轮到你时自动盖住屏幕"><input type="checkbox" id="hotseat"> 热座遮屏</label>
+    <button id="save">保存本场</button>
+    <button id="replay">回放</button>
+    <button id="new">新开一场</button>
+    <button id="curtain-btn">遮屏</button>
+    <span class="ctl">AI 速度
+      <select id="speed" title="AI 每步停多久">
+        <option value="1400">慢</option>
+        <option value="700" selected>正常</option>
+        <option value="250">快</option>
+        <option value="0">瞬间</option>
+      </select>
+    </span>
+    <button id="reset" title="清掉浏览器里记住的设置">重置设置</button>
+  </div>
+</header>
+
+<div id="notice" class="notice hidden"></div>
+<div id="ailine" class="ailine"></div>
+
+<div id="seats" class="seats"></div>
+<div id="settingline" class="settingline"></div>
+<div id="replaybar" class="replaybar hidden">
+  <select id="rpl-list" title="历史对局"></select>
+  <button id="rpl-first" title="回到开局">|◀</button>
+  <button id="rpl-prev">◀</button>
+  <button id="rpl-play">▶ 播放</button>
+  <button id="rpl-next">▶</button>
+  <button id="rpl-last" title="跳到末尾">▶|</button>
+  <input type="range" id="rpl-range" min="0" max="0" value="0" step="1">
+  <span id="rpl-step" class="dim">—</span>
+  <select id="rpl-key" title="跳到关键事件"><option value="">跳到事件…</option></select>
+  <a id="rpl-dl" class="dl" download>下载</a>
+  <button id="rpl-del">删除</button>
+  <button id="rpl-exit">退出回放</button>
+</div>
+
+<main>
+  <section class="board">
+    <div class="panel">
+      <div class="panel-title">公共池 <span class="dim" id="pool-note"></span></div>
+      <div class="pool" id="pool"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">座位</div>
+      <div class="players" id="playerlist"></div>
+    </div>
+    <div class="panel" id="result-panel" hidden>
+      <div class="panel-title">本局结算 <span class="dim" id="result-note"></span></div>
+      <div id="result"></div>
+      <div class="result-actions"><button id="next-hand" class="primary">下一局 ▶</button></div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="panel">
+      <div class="panel-title">我的手牌 <span class="dim" id="hand-note"></span></div>
+      <div class="hand" id="hand"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">可执行操作</div>
+      <div class="ops" id="ops"></div>
+      <div class="hint" id="hint"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">日志</div>
+      <ol class="log" id="log"></ol>
+    </div>
+  </aside>
+</main>
+<script src="/app.js?v=3"></script>
+</body>
+</html>

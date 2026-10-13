@@ -1,0 +1,16 @@
+# 运行产物:对局存档与训练结果(每局 ~25KB,训练表 ~100KB)
+data/
+
+node_modules/
+dist/
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 本地密钥(将来接 RemoteAgent 时用)
+.env
+.env.*
