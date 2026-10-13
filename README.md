@@ -573,6 +573,19 @@ LLM_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions LLM_MODEL=qwen2.5:7b \
 
 **成本参考**:一手牌约 10~30 次调用,prompt 约 400 token;用本地模型是 0 成本,云 API 一手牌大约几分钱。
 
+### 网络受限环境怎么选(2026-10 实测)
+
+如果你在国内、或者网络对 GitHub/Google 不友好(校园网常见),实测结论:
+
+| 方案 | 状况 |
+| --- | --- |
+| **国内 LLM API** | ✅ **首选** —— 实测延迟:智谱 285ms / 通义 485ms / DeepSeek 969ms / SiliconFlow 1145ms;**智谱 glm-4-flash 免费** |
+| 本地 Ollama | ⚠️ 安装包托管在 GitHub Releases,实测下行 **0.1 MB/s**(1.4 GB ≈ 4 小时);模型仓库 `registry.ollama.ai` 反而可通,所以**卡点只是那个安装包** |
+| OpenAI / Gemini | ❌ 实测直接超时 |
+| `examples/mock-llm.ts` | ✅ 完全不联网,用来验证链路 |
+
+结论:**想快点看到 LLM 上场,就用国内 API 的免费额度**(注册→拿 key→设三个环境变量即可),别和下载器较劲。
+
 ### 人也能上场:逐步式会话
 
 `examples/agent-session.ts` 是"人在环"的版本 —— 每敲一次命令推进到轮到你,你自己做决定。
