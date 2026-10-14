@@ -85,3 +85,5 @@ select{flex:0 0 auto;min-width:120px}
 #result .cards{color:var(--dim)}
 .advanced{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:8px 14px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
 .advanced input{width:92px;padding:4px 8px;background:#123a25;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:inherit}
+/* 欠债模式:这一步会把你打成负数 */
+#ops button.debt, .ops button.debt{border-color:#e2857e;color:#e2857e;box-shadow:0 0 0 1px rgba(226,133,126,.35) inset}

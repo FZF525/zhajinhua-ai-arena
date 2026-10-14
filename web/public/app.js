@@ -259,8 +259,14 @@ function render() {
     b.textContent = LABELS[l.name] ?? l.name;
     if (l.cost) { b.dataset.cost = l.cost + " 分"; b.classList.add("cost"); }
     if (l.name === "INTERCEPT") { b.classList.add("primary"); b.textContent = "\u26a1 截胡"; }
-    const afford = v.actor === null ? true : v.players[v.actor].points >= (l.cost ?? 0) || l.name === "VIEW_HAND";
+    // 欠债模式:不再因为"付不起"禁用按钮 —— 付了会变负数,由破产阈值决定何时出局
+    const myPoints = v.actor === null ? 0 : v.players[v.actor].points;
+    const afford = (v.allowDebt === true || v.actor === null) ? true : (myPoints >= (l.cost ?? 0) || l.name === "VIEW_HAND");
     b.disabled = !afford;
+    if (v.allowDebt === true && v.actor !== null && myPoints < (l.cost ?? 0)) {
+      b.classList.add("debt");
+      b.title = "欠债模式:这一手会让你变成 " + (myPoints - (l.cost ?? 0)) + " 分(负债)";
+    }
     b.onclick = () => {
       sel = { take: null };
       switch (l.name) {

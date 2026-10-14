@@ -538,7 +538,7 @@ test("E2E-23 欠债模式:分值为负时仍能行动,守恒与不变量都成�
       let a: Action | null = null;
       if (seat === 0) {
         // 被迫跟注机器:只要 CALL 合法就跟(饿着也要跟 → 才会欠债)
-        a = legalActions(st, 0).find((x) => x.type === "CALL") ?? null;
+        a = legalActions(st).includes("CALL") ? ({ type: "CALL", seat: 0 } as Action) : null;
       }
       if (!a) a = normal[seat](st, rng) as Action;
       if (!a || !apply(st, a).ok) break;
@@ -558,4 +558,36 @@ test("E2E-23 欠债模式:分值为负时仍能行动,守恒与不变量都成�
   // 守恒:总分(含负数)与开局一致(赢家通吃,积分只在玩家间转移)
   const sum = on.st.players.reduce((s, p) => s + p.points, 0) + (on.st.pot ?? 0);
   assert.equal(sum, on.total0, "总分守恒(欠债也不改变总账):" + sum + " vs " + on.total0);
+});
+
+test("E2E-24 欠债模式下'付不起'不再是限制:破产者仍可 CALL(并变负);非欠债模式则拒绝", () => {
+  const mk = (debt: boolean) => {
+    const cfg = mergeConfig(makeBalancedConfig(3), {
+      players: { startPoints: 100, allowDebt: debt },
+      ante: { amount: 40 },
+      endGame: { bustAtOrBelow: -10000, winAtOrAbove: 100000, maxHands: 30 },
+    });
+    const st = createGame(cfg, ["A", "B", "C"], 3);
+    advance(st);
+    // 把当前行动者打到只剩 1 分(不足以跟注)
+    st.players[st.turn.seat!].points = 1;
+    return st;
+  };
+  const seatOf = (st: GameState) => st.turn.seat!;
+
+  // 欠债模式:CALL 出现在合法动作里,且能执行成功 → 变成负分
+  const on = mk(true);
+  const sOn = seatOf(on);
+  assert.ok(legalActions(on).includes("CALL"), "欠债模式下破产者也应能 CALL,实际 " + JSON.stringify(legalActions(on)));
+  const before = on.players[sOn].points;
+  const r = apply(on, { type: "CALL", seat: sOn });
+  assert.equal(r.ok, true, "欠债模式下 CALL 应被接受:" + (r.error?.message ?? ""));
+  assert.ok(on.players[sOn].points < before, "积分应变成负数(欠债),实际 " + on.players[sOn].points);
+  assert.ok(on.players[sOn].points < 0, "应为负分");
+
+  // 非欠债模式:付不起就不能 CALL
+  const off = mk(false);
+  const sOff = seatOf(off);
+  assert.equal(legalActions(off).includes("CALL"), false, "非欠债模式下不应提供付不起的 CALL,实际 " + JSON.stringify(legalActions(off)));
+  assert.equal(apply(off, { type: "CALL", seat: sOff }).ok, false, "非欠债模式下 CALL 应被拒绝");
 });

@@ -40,3 +40,10 @@ test("HTML-05 前端期望的服务端版本与 src/version.ts 一致", () => {
   assert.ok(ver, "src/version.ts 应该有 ENGINE_VERSION");
   assert.equal(expect, ver, "前端 EXPECT_SERVER=" + expect + " 与服务端 " + ver + " 不一致 —— 改了版本号要两边一起改");
 });
+
+test("HTML-06 欠债模式不得在前端禁用按钮(引擎已放开,前端不能又拦住)", () => {
+  const js = readFileSync(new URL("../web/public/app.js", import.meta.url), "utf8");
+  const line = js.split("\n").find((l) => l.includes("const afford =")) ?? "";
+  assert.ok(line.includes("v.allowDebt"), "afford 判断必须考虑 allowDebt:实际 " + line.trim());
+  assert.ok(js.includes("按钮") || js.includes("欠债模式:不再因为"), "应有说明性注释");
+});
