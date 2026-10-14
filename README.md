@@ -683,6 +683,10 @@ node examples/zerob-eval.ts "data/zerob.json#EQBfast" "data/zerob-p6.json#EQBfas
 > 同一批数据用它重跑后,**我早先 20 场得出的"+197 换兜底更好"被推翻**(200 场配对后是显著更差)✓
 > **教训:20 场 × 6 局在这个游戏里的噪声是 ±千分级,任何小于 100 场的结论都不可信。** 想复现多人训练:`node examples/zerob-train-multi.ts 6 40000`
 
+## 造一个新的 AI(以及把 Sam 改强)
+
+> 📖 想加选手、或者研究"为什么 Sam 会输"?看 **[docs/add-an-ai.md](docs/add-an-ai.md)** —— 20 行模板、动作字段速查、公平性铁律、注册三处、测试套路、评估三铁律,以及**基于实测数据的 Sam 改进假设**(阈值不随桌型变化 / 缺赔率纪律 / 尾部风险无上限)。
+
 ## 让 LLM 上场(外部 AI 入口)
 
 > 📖 **只想接入、不想读代码?** 看 [docs/llm-entry.md](docs/llm-entry.md) —— 三步上桌、接口契约、四个已知的坑、成本实测、以及可以让你加一行的**擂台榜**。

@@ -28,6 +28,7 @@ export const makeMyBot = (): Policy => (state: GameState, rng) => {
 | 精确胜率 | `src/ai/equity.ts`(未知牌空间 + 采样摊牌) |
 | 自对弈学习 | `src/ai/learning.ts`(状态抽象 + Q 学习 + `examples/zerob-train.ts`) |
 | 想接 LLM / Python / 别的模型 | 已内置:见 [docs/llm-entry.md](docs/llm-entry.md),设 3 个环境变量即可上桌 |
+| 想写新 AI / 把 Sam 改强 | 见 [docs/add-an-ai.md](docs/add-an-ai.md)(模板、测试、评估铁律、改进假设) |
 
 ### 公平竞赛(硬性)
 
