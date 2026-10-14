@@ -13,7 +13,7 @@
 | 部分 | 状态 |
 | --- | --- |
 | 术语表 | ✔ 已在 main |
-| 服务端 i18n(模块 + 目录 + `?lang=` + 6 条守卫测试) | ✔ 已实现并全绿,**在分支 `i18n-wip`** |
+| 服务端 i18n(模块 + 目录 + `?lang=` + 6 条守卫 + 1 条 E2E 冒烟) | ✔ 已实现,**起服务实测通过**,在分支 `i18n-wip` |
 | 前端文案(按钮/标题/提示) | ✗ 未做(约 215 处) |
 | 英文 LLM prompt | ✗ 未做(**有风险,见 §5**) |
 | `spec.md` 全文英文 | ✗ 未做(建议最后) |
@@ -96,6 +96,7 @@ git checkout i18n-wip -- src/i18n.ts src/locales src/format.ts src/evaluator.ts 
 | `I18N-04` | 事件日志支持英文,且**默认仍是中文**;脱敏文案也要跟着语言(`[hidden]`) | 破坏既有行为 / 英文界面蹦中文 ✗ |
 | `I18N-05` | `buildView(state, true, { locale: "en" })` 的 JSON 里**零中文字符** | 整条渲染链漏翻 ✗ |
 | `I18N-06` | `resolveLocale`:`en-US → en`,`fr → zh`,缺键回退中文 | 语言判定 / 渐进翻译 ✗ |
+| `E2E-SRV-01` | **真起 `web/server.ts`**,走一遍 新开一场 → 查询 → 推进 → 存档 → 读档 → `?lang=en` | 只有真跑才暴露的服务端错误 ✗(见 §8) |
 
 ## 7. 怎么手工验证
 
@@ -112,13 +113,23 @@ curl -s "http://127.0.0.1:8787/api/state?lang=en" | head -c 400
 
 作者报告「参数显示」有问题,于是把 i18n 整份回退到已验证的 `ec3c4cb`(本地 == 远端),只在 main 保留术语表 ✓
 
-**排查结论**:这次 i18n 的改动**没有碰**参数显示相关的文件 —— `web/public/app.js`、`web/public/index.html`、`src/config.ts`、`src/costs.ts` 的最后一次改动都是 `f37ed9b`(回放修复),与 i18n 无关 ✓
+**原因就是这次 i18n 改动** ✗ —— 把 `localeOf(req, url)` 塞进了**没有 `req` 参数的辅助函数**(`viewWithAgents` / `stepOnce`):
 
-所以:
+```ts
+// 出错版本(i18n-wip 初版)
+function viewWithAgents(reveal = true, god = false) {          // ← 参数里没有 req
+  const v = buildView(game, reveal, { ..., locale: localeOf(req, url) });  // ← 引用未定义的 req ✗
+}
+```
 
-* 若回退后参数显示**恢复正常** → 说明确实是这次改动引起的 ✗,请在 `i18n-wip` 上二分定位
-* 若回退后**仍然不对** ✗ → 问题在别处(前端设置回显 / 自定义数值 / 浏览器缓存),另开一单查 ✓
+开局时 `newGame → viewWithAgents()` 立刻抛 `ReferenceError: req is not defined` ✓
+而前端把**任何**开局失败都渲染成「参数有问题,没有开局」✗ —— 所以看起来像参数问题 ✓
+(顺带:界面最好把原始错误放得更显眼,别让人以为是自己填错了参数 ✓)
 
+**已在分支上修好** ✓:`locale` 改成**显式形参**(每个请求解析一次,显式往下传 ✓),并补了 `E2E-SRV-01` 起服务冒烟 ✓
+
+**为什么全套 139 条测试没抓到** ✗:测试全是库级调用,没有一个真的启动 HTTP 服务 ✓
+—— 这就是那条测试存在的意义 ✓ **改服务端之后,先跑它** ✓
 ## 9. 参考
 
 * 术语表:[`docs/glossary.zh-en.md`](glossary.zh-en.md)
