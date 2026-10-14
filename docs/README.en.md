@@ -13,12 +13,12 @@ plus a built-in **AI arena** with 10 agents and a low-noise evaluation harness.
 | | |
 | --- | --- |
 | **Rules** | 104 cards / 12 tiers / blind vs open play / compare / kick + blockade round / deferred intercept |
-| **Tests** | **125** (124 pass, 1 exhaustive test skipped by default), incl. **91,962,520-hand exhaustive enumeration** |
+| **Tests** | **130** (129 pass, 1 exhaustive test skipped by default), incl. **91,962,520-hand exhaustive enumeration** |
 | **Dependencies** | **0** — Node ≥ 22.18 runs the `.ts` files directly; no `npm install`, no build step |
 | **AI** | **10 agents**: 3 rule-based · 3 Monte-Carlo · 3 exact-equity · 1 self-play (tabular Q-learning) |
 | **Arena** | round-robin · grouped cup · 6-seat cyclic league · god-view spectating · seed-based replay (~25 KB/match, 0.5 ms/frame) |
 | **External AI** | any OpenAI-compatible endpoint can take a seat — **view isolation** (it cannot see other hands) + explainable violations |
-| **Measured** | In heads-up play vs Sam: Baozi **+654** · Brian +304 · ZeroB +85 · random −125 · EQB **−528** → **discipline beats calculation** |
+| **Measured** | In heads-up play vs Sam (60 matches × 6 hands): Brian **+578** · Yeon +453 · May +328 · ZeroB +137 · Baozi +11 · EQB −75 → **accuracy alone is not enough** |
 
 ## Quick start
 
@@ -59,7 +59,7 @@ compare rules (earliest round / blind-target protection / cost multiplier) and a
 src/         engine (cards / rng / evaluator / costs / validate / engine / state), AI, CLI
 web/         zero-dependency node:http server + static UI (hot-seat, spectating, replay bar)
 examples/    benchmarks, tournaments, probes, LLM duel, self-play training, paired evaluator
-test/        125 node:test cases (engine invariants, privacy contracts, AI behaviour, end-to-end)
+test/        130 node:test cases (engine invariants, privacy contracts, AI behaviour, end-to-end)
 docs/        llm-entry.md · add-an-ai.md · lessons.md (engineering pitfalls) · this file
 ```
 

@@ -64,4 +64,4 @@ for (let g = 1; g <= GENS; g++) {
   saveZeroB(table, OUT);
 }
 console.log("\n已保存到 " + OUT);
-console.log("参考:Sam 基准 = 0 分;同规模测试里 Baozi(保守规则型)≈ +654,Brian(激进 MC)≈ +304(样本不同,仅看量级)");
+console.log("参考:Sam 基准 = 0 分;60 场单挑里 Brian(激进 MC)≈ +578、Yeon ≈ +453、Baozi(保守规则型)≈ +11(样本不同,仅看量级)");
