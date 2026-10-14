@@ -8,7 +8,7 @@ import { evaluate, compare } from "../evaluator.ts";
 import type { Card } from "../cards.ts";
 import { callCost, compareCost, raiseCost } from "../costs.ts";
 import { enumerateActions } from "../env.ts";
-import { effectivePoints } from "./heuristic.ts";
+import { effectivePoints, canAfford } from "./heuristic.ts";
 import type { Policy } from "../env.ts";
 import type { Rng } from "../rng.ts";
 import { auxDecision, PROFILES } from "./heuristic.ts";
@@ -106,17 +106,18 @@ export function equityDecide(s: GameState, rng: Rng, prof: EqProfile): Action {
   const { equity } = estimateEquity(s, seat, prof.samples, rng);
   const call = callCost(s, seat).total;
   const price = call / (s.pot + call + 1);          // 跟注需要的盈亏平衡胜率
-  const canCall = of("CALL").length > 0 && affordable(effectivePoints(me.points, s.config), call, prof) || call <= effectivePoints(me.points, s.config);
+  // 欠债模式:引擎允许赊账 → 不因为"名义筹码不够"就弃牌(见 canAfford 的注释:真实事故里这样会弃掉葫芦)
+  const canCall = of("CALL").length > 0 && canAfford(s.config, me.points, call);
   const raiseAct = of("RAISE")[0] as (Action & { toMultiplier: number }) | undefined;
   const raiseAmt = raiseAct ? raiseCost(s, seat, raiseAct.toMultiplier).total : Infinity;
   const cCost = compareCost(s, seat).total;
 
-  if (of("COMPARE").length && equity >= prof.compareAt && effectivePoints(me.points, s.config) >= cCost) {
+  if (of("COMPARE").length && equity >= prof.compareAt && canAfford(s.config, me.points, cCost)) {
     const targets = of("COMPARE") as Array<Action & { targetSeat: number }>;
     const weak = targets.find((a) => player(s, a.targetSeat).blind) ?? targets[0];
     return weak;
   }
-  if (raiseAct && equity >= prof.raiseAt && effectivePoints(me.points, s.config) >= raiseAmt) return raiseAct;
+  if (raiseAct && equity >= prof.raiseAt && canAfford(s.config, me.points, raiseAmt)) return raiseAct;
   if (canCall && equity > price * prof.margin) return of("CALL")[0];
   if (canCall && call <= s.config.ante.amount * 2) return of("CALL")[0];   // 极小注:跟了看结果
   return of("FOLD")[0];

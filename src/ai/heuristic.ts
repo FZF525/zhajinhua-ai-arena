@@ -23,6 +23,17 @@ export function effectivePoints(points: number, cfg: GameConfig): number {
   return Math.max(points, nominal);
 }
 
+/**
+ * "这一注付得起吗" —— 欠债模式下由**引擎**决定,AI 不再自己拦。
+ * 反例(真实事故):底注 53 / 初始 2888 / 允许欠债,长局里 M=32 时跟注要 3392 >
+ * 名义筹码 2888 → 闸门落下 → EQB 拿着葫芦弃牌,而引擎其实允许它欠债跟注。
+ * 于是"负债玩家"会被自己的名义筹码卡成"只会弃牌",正是这里要避免的事。
+ */
+export function canAfford(cfg: GameConfig, points: number, cost: number): boolean {
+  if (cfg.players.allowDebt === true) return true;   // 引擎允许赊账 → 付得起
+  return effectivePoints(points, cfg) >= cost;
+}
+
 export interface Profile {
   name: string;
   label: string;
@@ -153,9 +164,9 @@ export function mainDecision(st: GameState, rng: Rng, profile: Profile): Action 
   const call = callCost(st, seat).total;
   const raiseAct = of("RAISE")[0];
   const raiseAmt = raiseAct ? raiseCost(st, seat, (raiseAct as Action & { toMultiplier: number }).toMultiplier).total : Infinity;
-  const canRaise = !!raiseAct && effectivePoints(me.points, st.config) >= raiseAmt;
-  const canCall = effectivePoints(me.points, st.config) >= call;
-  const canCompare = has("COMPARE") && effectivePoints(me.points, st.config) >= compareCost(st, seat).total;
+  const canRaise = !!raiseAct && canAfford(st.config, me.points, raiseAmt);
+  const canCall = canAfford(st.config, me.points, call);
+  const canCompare = has("COMPARE") && canAfford(st.config, me.points, compareCost(st, seat).total);
   const potOdds = call / (st.pot + call + 1);
 
   // 比牌:牌力够硬,或对手只剩 1 人且注码已经很贵

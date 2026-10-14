@@ -12,6 +12,8 @@ import { mcDecide } from "../src/ai/montecarlo.ts";
 import { handReward } from "../src/ai/learning.ts";
 import { cardsFromIds } from "../src/cards.ts";
 import { legalActions } from "../src/validate.ts";
+import { callCost } from "../src/costs.ts";
+import { effectivePoints } from "../src/ai/heuristic.ts";
 
 /** 安全换手牌:把原手牌还回牌堆,再从牌堆里取指定牌 —— 不会产生重复卡牌 */
 function setHand(st: GameState, seat: number, ids: string[]): void {
@@ -282,4 +284,49 @@ test("AI-13 蒙特卡洛不得因 rollout 截断而弃掉强牌(四条事件回�
       assert.equal(sim.mean, 0, "没有有效样本时不应给出虚假期望值");
     }
   }
+});
+
+test("AI-14 欠债模式下不该因「名义筹码不够」弃强牌(真实事故:葫芦被弃)", () => {
+  // 事故现场:底注 53 / 初始 2888 / 允许欠债;长局 M=32 时跟注 3392 > 名义筹码 2888
+  // → 旧逻辑的 canCall 为假 → EQB 拿着葫芦弃牌(引擎其实允许它欠债跟注)
+  const build = (allowDebt: boolean) => {
+    const cfg = mergeConfig(makeConfig(), {
+      players: { startPoints: 2888, allowDebt },
+      ante: { amount: 53 },
+      endGame: { maxHands: 10, winAtOrAbove: 250000, bustAtOrBelow: -150000 },
+    });
+    const st = createGame(cfg, ["EQB", "Sam", "Baozi", "Lucas", "ZeroB", "Brian"], 4242);
+    advance(st);
+    let guard = 0;
+    while (st.turn.seat !== 0 && st.phase === "BETTING" && guard++ < 50) {
+      const s = st.turn.seat;
+      if (s === null) break;
+      if (!apply(st, { type: "CALL", seat: s }, { dealNextHand: false }).ok) break;
+    }
+    // 从牌堆里动态凑一手葫芦(直接写死牌 id 会撞上"这张在别人手里")
+    const byRank = new Map<string, typeof st.deck>();
+    for (const c of [...st.deck]) {
+      const r = c.id.slice(c.id.indexOf("-") + 1);
+      byRank.set(r, [...(byRank.get(r) ?? []), c]);
+    }
+    const ranks = [...byRank.entries()].filter(([, cs]) => cs.length >= 3).sort((a, b) => b[1].length - a[1].length);
+    const r1 = ranks[0];
+    const r2 = ranks.find(([r, cs]) => r !== r1[0] && cs.length >= 2)!;
+    setHand(st, 0, [...r1[1].slice(0, 3).map((c) => c.id), ...r2[1].slice(0, 2).map((c) => c.id)]);
+    const me = player(st, 0);
+    me.points = -45236;      // 深度负债(与真实那一局相同)
+    me.blind = false;
+    // 把注码一路拉高,直到"跟注超过名义筹码"——真实事故就发生在这样的高 M 长局里
+    for (let m = 4; m <= 4096 && callCost(st, 0).total <= effectivePoints(me.points, st.config); m *= 2) st.multiplier = m;
+    return st;
+  };
+  const debt = build(true);
+  assert.ok(callCost(debt, 0).total > effectivePoints(-45236, debt.config), "前提:这一注必须超过名义筹码,否则用例失去意义");
+  for (const nm of ["EQB", "Sam", "Baozi", "Lucas"]) {
+    const a = makeAgent(nm)(debt, createRng(7));
+    assert.notEqual(a?.type, "FOLD", nm + " 在欠债模式下不该弃掉葫芦(引擎允许赊账)");
+  }
+  // 对照:不允许欠债时,付不起就只能弃 —— 这道闸门本身是对的,别一起删了
+  const noDebt = build(false);
+  assert.equal(makeAgent("Sam")(noDebt, createRng(7))?.type, "FOLD", "非欠债模式:付不起仍应弃牌");
 });
