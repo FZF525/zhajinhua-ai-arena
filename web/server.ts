@@ -107,13 +107,13 @@ function newGame(players: number, table: string, seed?: number, agentSpec?: Arra
 }
 
 /** 视图 + 座位归属(AI / 人类),供前端决定"要不要继续推进" */
-function viewWithAgents(reveal = true, god = false) {
+function viewWithAgents(reveal = true, god = false, locale: Locale = "zh") {
   const actor = actorOf(game);
   const humans = agents.map((a, i) => (a ? -1 : i)).filter((i) => i >= 0);
   // 视角只能落在人类座位上:单人局锁死自己;热座只跟随"轮到的那个人类";轮到 AI 时旁观
   // (旧写法在热座下把视角交给当前行动者 → AI 踢出的暗牌会被玩家看到)
   const viewer = viewerSeatFor(actor, humans);
-  const v = buildView(game, reveal, { god, viewer, locale: localeOf(req, url) }) as ReturnType<typeof buildView> & { actorIsAI: boolean; seatIsAI: boolean[]; humanSeats: number[] };
+  const v = buildView(game, reveal, { god, viewer, locale }) as ReturnType<typeof buildView> & { actorIsAI: boolean; seatIsAI: boolean[]; humanSeats: number[] };
   v.seatIsAI = agents.map((a) => !!a);
   v.actorIsAI = actor !== null && !!agents[actor];
   v.humanSeats = agents.map((a, i) => (a ? -1 : i)).filter((i) => i >= 0);
@@ -121,7 +121,7 @@ function viewWithAgents(reveal = true, god = false) {
 }
 
 /** 只推进【一步】AI 动作:由前端按自己的节奏反复调用(这样玩家能看清每一步) */
-function stepOnce(): { ok: boolean; reason?: string; acted?: number; events?: string[] } {
+function stepOnce(locale: Locale = "zh"): { ok: boolean; reason?: string; acted?: number; events?: string[] } {
   if (!game || game.gameOver) return { ok: false, reason: "gameOver" };
   if (game.phase === "HAND_START") return { ok: false, reason: "awaitingNext" };
   const actor = actorOf(game);
@@ -137,14 +137,16 @@ function stepOnce(): { ok: boolean; reason?: string; acted?: number; events?: st
   record(recorder!, a);
   if (!PAUSE_BETWEEN_HANDS && game.phase === "HAND_START" && !game.gameOver) { advance(game); recordAdvance(recorder!); }
   maybeAutoSave();
-  return { ok: true, acted: actor, events: game.events.slice(before).map((e) => describeEvent(e, { locale: localeOf(req, url) })) };
+  return { ok: true, acted: actor, events: game.events.slice(before).map((e) => describeEvent(e, { locale })) };
 }
 
 /** 界面语言:?lang=en 优先,其次 Accept-Language,默认中文 */
-function localeOf(req: { headers: Record<string, string | string[] | undefined> }, url: URL): Locale {
+function localeOf(req: http.IncomingMessage): Locale {
+  const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  const h0 = req.headers["accept-language"];
   const q = url.searchParams.get("lang");
   if (q) return resolveLocale(q);
-  const h = req.headers["accept-language"];
+  const h = h0;
   return resolveLocale(Array.isArray(h) ? h[0] : h);
 }
 
@@ -163,6 +165,9 @@ async function readBody(req: http.IncomingMessage): Promise<any> {
 }
 
 const server = http.createServer(async (req, res) => {
+  // 界面语言:每个请求解析一次,**显式往下传** —— 不要去够辅助函数外面的 req/url
+  // (曾经把 localeOf(req, url) 塞进没有 req 的辅助函数:全套测试全绿,浏览器里新开一场却 ReferenceError)
+  const L: Locale = localeOf(req);
   const url = new URL(req.url ?? "/", "http://localhost");
   const path = url.pathname;
 
@@ -173,20 +178,20 @@ const server = http.createServer(async (req, res) => {
       const issues = checkNumbers(Number(body.players ?? 3), String(body.table ?? "auto"), ov);
       const errors = issues.filter((i) => i.level === "error");
       if (errors.length) {
-        return send(res, 200, JSON.stringify({ ok: false, error: errors[0].message, issues, view: game ? viewWithAgents() : null }));
+        return send(res, 200, JSON.stringify({ ok: false, error: errors[0].message, issues, view: game ? viewWithAgents(true, false, L) : null }));
       }
       game = newGame(Number(body.players ?? 3), String(body.table ?? "auto"),
         body.seed === undefined ? undefined : Number(body.seed),
         Array.isArray(body.agents) ? body.agents : undefined,
         (body.numbers && typeof body.numbers === "object" ? body.numbers : {}) as NumberOverrides);
-      return send(res, 200, JSON.stringify({ ok: true, issues, view: viewWithAgents(), agents: agentNames() }));
+      return send(res, 200, JSON.stringify({ ok: true, issues, view: viewWithAgents(true, false, L), agents: agentNames() }));
     }
     if (path === "/api/state" && req.method === "GET") {
       if (!game) game = newGame(3, "auto");
       const reveal = url.searchParams.get("reveal") !== "0";
       const god = url.searchParams.get("god") === "1";
-      if (god) return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents(true, true) }));
-      return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents(reveal) }));
+      if (god) return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents(true, true, L) }));
+      return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents(reveal, false, L) }));
     }
     if (path === "/api/action" && req.method === "POST") {
       if (!game) return send(res, 400, JSON.stringify({ ok: false, error: "尚未开局" }));
@@ -197,27 +202,27 @@ const server = http.createServer(async (req, res) => {
       const action = { ...body, seat: actor, type: String(body.type) } as Action;
       const before = game.events.length;
       const r = apply(game, action, { dealNextHand: false });
-      if (!r.ok) return send(res, 200, JSON.stringify({ ok: false, error: r.error, view: viewWithAgents() }));
+      if (!r.ok) return send(res, 200, JSON.stringify({ ok: false, error: r.error, view: viewWithAgents(true, false, L) }));
       record(recorder!, action);                             // 人类动作也要进录制
       if (!PAUSE_BETWEEN_HANDS && game.phase === "HAND_START" && !game.gameOver) { advance(game); recordAdvance(recorder!); }
       maybeAutoSave();
-      const events = game.events.slice(before).map((e) => describeEvent(e, { locale: localeOf(req, url) }));
-      return send(res, 200, JSON.stringify({ ok: true, events, view: viewWithAgents() }));
+      const events = game.events.slice(before).map((e) => describeEvent(e, { locale: L }));
+      return send(res, 200, JSON.stringify({ ok: true, events, view: viewWithAgents(true, false, L) }));
     }
     if (path === "/api/health") return send(res, 200, JSON.stringify({ ok: true, players: game ? game.players.length : 0 }));
     if (path === "/api/next-hand" && req.method === "POST") {
       if (!game) return send(res, 400, JSON.stringify({ ok: false, error: "尚未开局" }));
-      if (game.gameOver) return send(res, 200, JSON.stringify({ ok: false, reason: "gameOver", view: viewWithAgents() }));
-      if (game.phase !== "HAND_START") return send(res, 200, JSON.stringify({ ok: false, reason: "alreadyDealt", view: viewWithAgents() }));
+      if (game.gameOver) return send(res, 200, JSON.stringify({ ok: false, reason: "gameOver", view: viewWithAgents(true, false, L) }));
+      if (game.phase !== "HAND_START") return send(res, 200, JSON.stringify({ ok: false, reason: "alreadyDealt", view: viewWithAgents(true, false, L) }));
       advance(game);
       if (recorder) recordAdvance(recorder);   // 局边界也要进存档,回放才能精确复现
       maybeAutoSave();
-      return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents() }));
+      return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents(true, false, L) }));
     }
     if (path === "/api/step" && req.method === "POST") {
       if (!game) return send(res, 400, JSON.stringify({ ok: false, error: "尚未开局" }));
       const body = await readBody(req);
-      const out = stepOnce();
+      const out = stepOnce(L);
       const view = viewWithAgents(true, !!body.god);
       return send(res, 200, JSON.stringify({ ...out, view }));
     }
