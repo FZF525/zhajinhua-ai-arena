@@ -59,3 +59,9 @@ test("HTML-07 语法闸门:所有前端 JS 都必须能通过 node --check(防�
     assert.equal(r.status, 0, f + " 语法错误:\n" + (r.stderr || "").split("\n").slice(0, 6).join("\n"));
   }
 });
+
+test("HTML-08 回放工具条不能被轮询自动隐藏(用户点「回放」后应保持可见)", () => {
+  assert.ok(js.includes("replayBarOpen"), "应有 replayBarOpen 标记");
+  const lines = js.split("\n").filter((l) => l.includes('classList.toggle("hidden", !('));
+  assert.ok(lines.some((l) => l.includes("replayBarOpen")), "工具条可见性必须考虑 replayBarOpen,实际:" + lines.join(" | "));
+});

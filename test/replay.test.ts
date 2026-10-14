@@ -1,12 +1,13 @@
 // 回放用例:确定性重演 / 逐帧一致 / 与实时对局等价
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeConfig } from "../src/config.ts";
+import { makeConfig, mergeConfig, scaleEconomy } from "../src/config.ts";
 import { createGame, checkInvariants } from "../src/state.ts";
 import { apply, advance } from "../src/engine.ts";
 import { createRng } from "../src/rng.ts";
 import { makeAgent } from "../src/ai/index.ts";
-import { createRecorder, record, replayFrames, replayTo } from "../src/replay.ts";
+import { createRecorder, record, recordAdvance, replayFrames, replayTo, harvest } from "../src/replay.ts";
+import { saveReplay, loadReplay, deleteReplay } from "../src/store.ts";
 import type { Action } from "../src/state.ts";
 
 function liveMatch(seed: number) {
@@ -23,8 +24,10 @@ function liveMatch(seed: number) {
     if (seat === null) break;
     const a = agents[seat](st, rng);
     if (!a) break;
-    if (!apply(st, a).ok) break;
+    // 镜像服务端语义:apply 不开下一局;局末显式开 + 记边界标记
+    if (!apply(st, a, { dealNextHand: false }).ok) break;
     record(rec, a);
+    if (st.phase === "HAND_START" && !st.gameOver) { advance(st); recordAdvance(rec); }
   }
   return { st, rec };
 }
@@ -77,4 +80,79 @@ test("RP-04 损坏的动作序列不会崩:遇到不匹配就停在最后一帧"
   const frames = replayFrames(broken);
   assert.equal(frames.length, 6, "前 5 个动作 + 初始帧");
   assert.deepEqual(checkInvariants(frames[frames.length - 1]), []);
+});
+
+test("REPLAY-06 自定义配置必须能被存档原样重放(回归:configPatch 曾为空,回放数字失真/中途非法)", () => {
+  const NAMES = ["EQB", "ZeroB", "Yeon", "Brian"];
+  // 关键:非默认配置(整表缩放 k=9 + 自定义阈值 + 欠债模式)
+  const cfg = mergeConfig(scaleEconomy(makeConfig(), 9), {
+    players: { startPoints: 1000, allowDebt: true },
+    endGame: { winAtOrAbove: 250000, bustAtOrBelow: -150000, maxHands: 4 },
+  });
+  const seed = 4242;
+  const st = createGame(cfg, NAMES, seed);
+  advance(st);
+  const agents = NAMES.map(makeAgent);
+  const rng = createRng(seed * 7 + 1);
+  const actions: Action[] = [];
+  const advances: number[] = [];      // 局边界:发生时的动作计数(与服务端 recordAdvance 同义)
+  let steps = 0;
+  while (!st.gameOver && steps++ < 5000) {
+    const seat = st.turn.seat;
+    if (seat === null) break;
+    const a = agents[seat](st, rng) as Action | null;
+    if (!a) break;
+    if (!apply(st, a, { dealNextHand: false }).ok) break;
+    actions.push(a);
+    if (st.phase === "HAND_START" && !st.gameOver) { advance(st); advances.push(actions.length); }
+  }
+  const finalPts = st.players.map((p) => p.points);
+
+  // 服务端现在的写法:把解析后的完整配置作为 configPatch
+  const rec = harvest(seed, NAMES, cfg, actions, advances);
+  const saved = saveReplay(rec, { hands: st.handNo, players: NAMES, actions: actions.length, result: { gameOver: st.gameOver, points: finalPts } });
+  const loaded = loadReplay(saved.file);
+  const st2 = replayTo(loaded, actions.length);
+  assert.deepEqual(st2.players.map((p) => p.points), finalPts, "重放必须还原相同的终局积分");
+  deleteReplay(saved.file);
+
+  // 反例:空配置(旧 bug)必须对不上 —— 否则说明这个用例已失去意义
+  const st3 = replayTo(harvest(seed, NAMES, {}, actions, advances), actions.length);
+  assert.notDeepEqual(st3.players.map((p) => p.points), finalPts, "空配置重放应当对不上(旧 bug 的表现)");
+});
+
+test("REPLAY-07 局间暂停语义必须被复现(回归:回放曾每个局边界多付一次底注)", () => {
+  const names = ["EQB", "ZeroB", "Yeon", "Brian"];
+  const cfg = mergeConfig(scaleEconomy(makeConfig(), 9), {
+    players: { startPoints: 1000, allowDebt: true },
+    endGame: { maxHands: 3, winAtOrAbove: 1e9, bustAtOrBelow: -1e9 },
+  });
+  const st = createGame(cfg, names, 77);
+  advance(st);
+  const agents = names.map(makeAgent);
+  const rng = createRng(5);
+  const rec = createRecorder(77, names, cfg);
+  const snaps: number[][] = [st.players.map((p) => p.points)];
+  let steps = 0;
+  while (!st.gameOver && steps++ < 3000) {
+    const seat = st.turn.seat;
+    if (seat === null) break;
+    const a = agents[seat](st, rng) as Action | null;
+    if (!a) break;
+    const r = apply(st, a, { dealNextHand: false });        // ← 服务端"局间暂停"语义
+    if (!r.ok) break;
+    record(rec, a);
+    snaps.push(st.players.map((p) => p.points));            // 这一帧 = 暂停态(未开下一局)
+    if (st.phase === "HAND_START" && !st.gameOver) { advance(st); recordAdvance(rec); }
+  }
+  // 末尾:若最后一步之后开了新局(玩家点了下一局),这一帧也在 snaps 里(与服务端保存时的 endHandNo 对齐)
+  const last = snaps[snaps.length - 1];
+  const now = st.players.map((p) => p.points);
+  if (now.join(",") !== last.join(",")) snaps.push(now);
+  rec.endHandNo = st.handNo;                                   // 服务端保存时会记这个
+  const frames = replayFrames(rec);
+  assert.equal(frames.length, snaps.length, "帧数应一致");
+  for (let i = 0; i < snaps.length; i++) {
+    assert.deepEqual(frames[i].players.map((p) => p.points), snaps[i], "第 " + i + " 帧与实时不一致");
+  }
 });

@@ -17,7 +17,7 @@ import { describeEvent } from "../src/format.ts";
 import { makeAgent, isAgentName, AI_NAMES, AGENTS } from "../src/ai/index.ts";
 import type { Policy } from "../src/env.ts";
 import { createRng } from "../src/rng.ts";
-import { createRecorder, record, replayTo } from "../src/replay.ts";
+import { createRecorder, record, recordAdvance, replayTo } from "../src/replay.ts";
 import type { Recording } from "../src/replay.ts";
 import { saveReplay, listReplays, loadReplay, deleteReplay, replaysDir, pruneReplays } from "../src/store.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
@@ -35,6 +35,8 @@ const PAUSE_BETWEEN_HANDS = process.env.ZHJ_NO_PAUSE !== "1";   // 局末停一�
 
 /** 保存当前录制(带摘要) */
 function saveCurrent(fileName?: string) {
+  // 记下"存档那一刻进行到第几局":局间暂停时玩家点过「下一局」也能被回放复现
+  if (recorder && game) recorder.endHandNo = game.handNo;
   if (!recorder) throw new Error("本场还没有录制");
   const summary = {
     hands: game ? game.handNo : 0,
@@ -94,7 +96,9 @@ function newGame(players: number, table: string, seed?: number, agentSpec?: Arra
     const a = agentSpec?.[i];
     return a && isAgentName(a) ? makeAgent(a) : null;
   });
-  recorder = createRecorder(s, names, {});
+  // 存档必须带上"这一场解析后的完整配置" —— 否则回放时 makeConfig({}) 会用默认配置重建,
+  // 自定义数值(底注刻度/阈值/欠债/比牌规则)全部丢失 → 回放数字错乱甚至中途非法(已修:REPLAY-06)
+  recorder = createRecorder(s, names, cfg);
   autoSaved = false;
   advance(st);
   return st;
@@ -125,9 +129,11 @@ function stepOnce(): { ok: boolean; reason?: string; acted?: number; events?: st
   const a = ag(game, createRng((Date.now() ^ (actor * 2654435761)) >>> 0));
   if (!a) return { ok: false, reason: "noAction" };
   const before = game.events.length;
-  const r = apply(game, a, { dealNextHand: !PAUSE_BETWEEN_HANDS });
+  // 统一用"局间暂停"语义:apply 不开下一局;需要时我们自己开并记一个边界标记 —— 这样回放能精确复现
+  const r = apply(game, a, { dealNextHand: false });
   if (!r.ok) return { ok: false, reason: r.error?.code ?? "rejected" };
   record(recorder!, a);
+  if (!PAUSE_BETWEEN_HANDS && game.phase === "HAND_START" && !game.gameOver) { advance(game); recordAdvance(recorder!); }
   maybeAutoSave();
   return { ok: true, acted: actor, events: game.events.slice(before).map(describeEvent) };
 }
@@ -180,9 +186,10 @@ const server = http.createServer(async (req, res) => {
       // 座位由服务端决定,避免客户端越权
       const action = { ...body, seat: actor, type: String(body.type) } as Action;
       const before = game.events.length;
-      const r = apply(game, action, { dealNextHand: !PAUSE_BETWEEN_HANDS });
+      const r = apply(game, action, { dealNextHand: false });
       if (!r.ok) return send(res, 200, JSON.stringify({ ok: false, error: r.error, view: viewWithAgents() }));
       record(recorder!, action);                             // 人类动作也要进录制
+      if (!PAUSE_BETWEEN_HANDS && game.phase === "HAND_START" && !game.gameOver) { advance(game); recordAdvance(recorder!); }
       maybeAutoSave();
       const events = game.events.slice(before).map(describeEvent);
       return send(res, 200, JSON.stringify({ ok: true, events, view: viewWithAgents() }));
@@ -193,6 +200,7 @@ const server = http.createServer(async (req, res) => {
       if (game.gameOver) return send(res, 200, JSON.stringify({ ok: false, reason: "gameOver", view: viewWithAgents() }));
       if (game.phase !== "HAND_START") return send(res, 200, JSON.stringify({ ok: false, reason: "alreadyDealt", view: viewWithAgents() }));
       advance(game);
+      if (recorder) recordAdvance(recorder);   // 局边界也要进存档,回放才能精确复现
       maybeAutoSave();
       return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents() }));
     }

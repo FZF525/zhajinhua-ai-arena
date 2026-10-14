@@ -191,7 +191,8 @@ function render() {
   renderNotice(v);
   // 回放模式:藏起操作区,亮出时间轴
   const bar = $("replaybar");
-  if (bar) bar.classList.toggle("hidden", !replayMode);
+  // replayBarOpen:用户点了「回放」但还没选文件时,工具条也要留住 —— 否则下一轮轮询就会把它 hidden 掉(真 bug)
+  if (bar) bar.classList.toggle("hidden", !(replayMode || replayBarOpen));
   // 操作区只在"轮到自己"时出现 —— 否则界面上会显示 AI 的可选动作,容易被误点
   const canAct = !replayMode && v.actor !== null && !v.actorIsAI && v.isMyTurn !== false;
   const opsPanel = $("ops");
@@ -571,6 +572,7 @@ setInterval(() => { if (!pending) refresh(); }, 3000);
 // ===== 观战 & 回放 =====
 let godView = false;
 let replayMode = false;
+let replayBarOpen = false;      // 回放工具条是否被用户显式打开(未选文件时也要保持可见)
 const rpl = { file: null, steps: 0, step: 0, playing: false, timer: null, labels: [] };
 const KEY_TYPES = { KICK: "踢牌", INTERCEPT: "截胡", COMPARE: "比牌", TAKE_BLOCKED: "收暗牌", FOLD: "弃牌" };
 
@@ -650,6 +652,7 @@ function togglePlay() {
 function exitReplay() {
   if (rpl.playing) togglePlay();
   replayMode = false;
+  replayBarOpen = false;
   $("replaybar").classList.add("hidden");
   $("ops").classList.remove("hidden");
   refresh();
@@ -664,6 +667,7 @@ $("next-hand").onclick = async () => {
 $("save").onclick = () => saveCurrent();
 $("replay").onclick = async () => {
   await refreshReplayList();
+  replayBarOpen = true;
   $("replaybar").classList.toggle("hidden", false);
   if (!$("rpl-list").value && replayMode) { /* 保持当前回放 */ }
 };
