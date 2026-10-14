@@ -2,8 +2,11 @@
 // 用法:node examples/zerob-eval.ts <A变体> <B变体> [场次=200] [每场局数=6] [模式=multi4]
 //   变体写法:  data/zerob.json#EQBfast   (表 + 兜底)
 //              data/zerob.json#Sam
-//              #Sam                      (不用表,纯兜底策略)
+//              #Sam / Sam                (不用表,纯用这个 AI —— 也可以直接写任意角色名)
 //              heuristic:Sam             (纯启发式)
+// 例子:比较 MC 与规则型(配对 × 同一批种子,给出 ±SE 与 t):
+//   node examples/zerob-eval.ts Brian Sam 120 6 heads
+//   node examples/zerob-eval.ts Yeon  Sam 120 6 heads
 // 模式:multi4 / multi6 / heads(单挑 Sam)
 // 要点:两个变体跑**同一批种子**,逐场做配对差值 —— 噪声比"各跑一遍再比均值"小得多。
 import { loadZeroB, zerobKey, zerobLegal, hasData, bestAction } from "../src/ai/learning.ts";
@@ -27,10 +30,12 @@ function parseSpec(spec: string): { table: ZeroBTable | null; fallback: string; 
   if (spec.startsWith("heuristic:")) {
     return { table: null, fallback: spec.slice(10), label: "纯启发式 " + spec.slice(10) };
   }
+  // 直接写角色名(不带 # 也不是 .json):当成"纯用这个 AI"
+  if (!spec.includes("#") && !spec.endsWith(".json")) return { table: null, fallback: spec, label: spec };
   const [path, fb = "EQBfast"] = spec.split("#");
   const table = path ? loadZeroB(path) : null;
   if (path && !table) throw new Error("读不到表: " + path);
-  return { table, fallback: fb, label: (path || "(无表)") + " + 兜底 " + fb };
+  return { table, fallback: fb, label: table ? path + " + 兜底 " + fb : fb };
 }
 
 function fallbackPolicy(name: string): Policy {
@@ -90,7 +95,7 @@ function evaluate(spec: { table: ZeroBTable | null; fallback: string }) {
 }
 
 const A = parseSpec(SPEC_A), B = parseSpec(SPEC_B);
-console.log("=== ZeroB 配对评估 ===");
+console.log("=== 配对评估(同一批种子 · 逐场配对 · 带标准误与 t)===");
 console.log("口径:" + MODE + "(" + NPLAY + " 人," + OPPONENTS.join("/") + ") " + MATCHES + " 场 × " + HANDS + " 局,座位轮换,种子 " + SEED0 + "+");
 console.log("A = " + A.label);
 console.log("B = " + B.label);
