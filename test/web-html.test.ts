@@ -2,6 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const DIR = new URL("../web/public/", import.meta.url);
 const html = readFileSync(new URL("index.html", DIR), "utf8");
@@ -46,4 +48,14 @@ test("HTML-06 欠债模式不得在前端禁用按钮(引擎已放开,前端不�
   const line = js.split("\n").find((l) => l.includes("const afford =")) ?? "";
   assert.ok(line.includes("v.allowDebt"), "afford 判断必须考虑 allowDebt:实际 " + line.trim());
   assert.ok(js.includes("按钮") || js.includes("欠债模式:不再因为"), "应有说明性注释");
+});
+
+test("HTML-07 语法闸门:所有前端 JS 都必须能通过 node --check(防止中文引号截断字符串这类低级但致命的事故)", () => {
+  const files = ["web/public/app.js"];
+  for (const f of files) {
+    const p = new URL("../" + f, import.meta.url);
+    // 直接用 node --check 验证(能捕获"字符串被中文引号截断"这类问题)
+    const r = spawnSync(process.execPath, ["--check", fileURLToPath(p)], { encoding: "utf8" });
+    assert.equal(r.status, 0, f + " 语法错误:\n" + (r.stderr || "").split("\n").slice(0, 6).join("\n"));
+  }
 });

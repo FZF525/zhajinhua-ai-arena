@@ -52,6 +52,23 @@ function setSelectValue(id, v, fallback) {   // 仅用于分场下拉
 }
 const PLAYER_CHOICES = [2, 3, 4, 5, 6];
 let players = 3;                                   // 当前人数(不再依赖原生 select 渲染)
+/** 安全绑定:元素不存在就跳过 —— 旧缓存的前端文件不该把整个界面搞崩(真出过:人数按钮消失) */
+function on(id, ev, fn) { const el = $(id); if (el) el.addEventListener(ev, fn); return el; }
+
+/** 启动自检:核心控件缺了就明确报错,而不是静默崩掉 */
+function selfCheck() {
+  const required = ["players", "table", "seats", "ops", "log", "hint", "new", "speed", "reset",
+    "num-ante", "num-start", "num-win", "num-bust", "num-hands", "num-debt",
+    "num-cmp-round", "num-cmp-protect", "num-cmp-cost", "thresh-hint", "settingline"];
+  const missing = required.filter((id) => !$(id));
+  if (missing.length === 0) return true;
+  const msg = "⚠ 前端文件版本不一致:缺少控件 " + missing.join(", ") + " —— 请按 Ctrl+F5 强制刷新";
+  const box = $("hint");
+  if (box) { box.textContent = msg; box.style.color = "#e2857e"; }
+  console.error(msg);
+  return false;
+}
+
 function playerCount() { return players; }
 function setPlayerCount(v, silent) {
   const n = Number(v);
@@ -469,7 +486,7 @@ function numbersHint(v) {
   box.textContent = (v.allowDebt ? "【欠债模式:分值可为负,由破产阈值决定何时出局】 " : "") +
     "当前生效:底注 " + v.fees.ante + " 分 · 跟注 " + v.fees.seen + "/" + v.fees.blind + " · 胜利阈值 " + v.winAtOrAbove + " · 局数上限 " + (v.maxHands ?? "不限") +
     "　|　底注是刻度:填了它会把整张费用表等比缩放(跟注/闷注/换牌/踢牌同比例),不破坏玩法平衡。" +
-    "　|　比牌:未看牌保护轮数设 1 可治"没看牌就被干掉"(实测狙击降 85%,比牌总数几乎不变);涨价没用(AI 不算比牌费)。" +
+    "　|　比牌:未看牌保护轮数设 1 可治「没看牌就被干掉」(实测狙击降 85%,比牌总数几乎不变);涨价没用(AI 不算比牌费)。" +
     "　|　实战经验:阈值差和注码刻度一起决定场次长度 —— 6 人自适应分场实测 差 2000≈1 手 / 5000≈2 手 / 10000≈6 手 / 20000≈20 手。";
 }
 
@@ -507,29 +524,11 @@ async function newGame() {
   }
 }
 
-$("curtain-go").onclick = () => { hideCurtain(); refresh(); };
-$("curtain-btn").onclick = () => {                     // 手动遮屏(单人时也能用)
-  const v = view;
-  if (v && v.actor !== null && !v.actorIsAI) { lastActor = v.actor; showCurtain(v.actor); }
-};
-$("table").onchange = () => markDirty();
-$("seats").onchange = () => markDirty();
-$("num-debt").onchange = () => markDirty();
-for (const id of ["num-ante", "num-start", "num-win", "num-bust", "num-hands", "num-cmp-round", "num-cmp-protect", "num-cmp-cost"]) {
-  const el = $(id);
-  if (el) el.oninput = () => markDirty();
-}
-$("new").onclick = () => { stopAI(); newGame(); };
-$("speed").onchange = () => { aiDelay = Number($("speed").value) || 0; };
-$("reset").onclick = () => {
-  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
-  location.reload();
-};
-function markDirty() { render(); }
-
+// ↓ 先把核心界面跑起来(人数按钮等),再绑定其余控件:后者即使出问题也不影响核心
 // 首屏:兜底选项 → 恢复上次设置(校验后)→ 按设置开一局(而不是服务端写死的 3 人场)
 (function boot() {
   try {
+    if (!selfCheck()) { renderPlayerButtons(); return; }   // 缺控件也要把人数按钮渲染出来
     ensureOptions("table", TABLE_CHOICES);
     const s = loadSettings();
     renderPlayerButtons();
@@ -545,6 +544,28 @@ function markDirty() { render(); }
     console.error("boot failed", err);
   }
 })();
+
+{"try" === "never" ? 0 : 0}
+$("curtain-go").onclick = () => { hideCurtain(); refresh(); };
+$("curtain-btn").onclick = () => {                     // 手动遮屏(单人时也能用)
+  const v = view;
+  if (v && v.actor !== null && !v.actorIsAI) { lastActor = v.actor; showCurtain(v.actor); }
+};
+$("table").onchange = () => markDirty();
+$("seats").onchange = () => markDirty();
+{ const el = $("num-debt"); if (el) el.onchange = () => markDirty(); }
+for (const id of ["num-ante", "num-start", "num-win", "num-bust", "num-hands", "num-cmp-round", "num-cmp-protect", "num-cmp-cost"]) {
+  const el = $(id);
+  if (el) el.oninput = () => markDirty();
+}
+$("new").onclick = () => { stopAI(); newGame(); };
+$("speed").onchange = () => { aiDelay = Number($("speed").value) || 0; };
+$("reset").onclick = () => {
+  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+  location.reload();
+};
+function markDirty() { render(); }
+
 setInterval(() => { if (!pending) refresh(); }, 3000);
 
 // ===== 观战 & 回放 =====
