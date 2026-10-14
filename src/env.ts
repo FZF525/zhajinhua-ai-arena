@@ -3,7 +3,7 @@
 import { createRng } from "./rng.ts";
 import type { Rng } from "./rng.ts";
 import { apply, cloneState } from "./engine.ts";
-import { legalActions } from "./validate.ts";
+import { compareRuleBlock, legalActions } from "./validate.ts";
 import { isAlive, nextAliveSeat, player } from "./state.ts";
 import type { Action, GameState, PlayerState } from "./state.ts";
 import type { Card } from "./cards.ts";
@@ -57,7 +57,8 @@ export function enumerateActions(st: GameState, opts: EnumerateOptions = {}): Ac
         break;
       }
       case "COMPARE":
-        for (const q of st.players) if (q.seat !== seat && isAlive(q)) out.push({ type: "COMPARE", seat, targetSeat: q.seat });
+        // 与 validateCompare 共用同一判定:规则不允许的目标不出现在列表里(否则 apply 会拒绝 → 卡死)
+        for (const q of st.players) if (q.seat !== seat && isAlive(q) && compareRuleBlock(st, seat, q.seat) === null) out.push({ type: "COMPARE", seat, targetSeat: q.seat });
         break;
       case "EXCHANGE":
         for (const take of faceUpPool) {

@@ -150,11 +150,14 @@ function validateCompare(state: GameState, action: Action): ValidationResult {
   const a = action as Action & { type: "COMPARE"; targetSeat: number };
   const cfg = state.config;
   const p = player(state, a.seat);
-  if (!cfg.compare.enabled) return fail("ERR_COMPARE_INVALID_TARGET", "比牌已禁用");
-  if (!cfg.compare.anyOpponent) return fail("ERR_COMPARE_INVALID_TARGET", "不可指定对手");
-  if (a.targetSeat === a.seat) return fail("ERR_COMPARE_INVALID_TARGET", "不能和自己比牌");
+  const blocked = compareRuleBlock(state, a.seat, a.targetSeat);
+  if (blocked) {
+    const code = blocked.indexOf("轮起才能比牌") >= 0 ? "ERR_COMPARE_TOO_EARLY"
+      : blocked.indexOf("保护闷牌者") >= 0 ? "ERR_COMPARE_BLIND_TARGET_PROTECTED"
+      : "ERR_COMPARE_INVALID_TARGET";
+    return fail(code, blocked);
+  }
   const t = state.players[a.targetSeat];
-  if (!t || !isAlive(t)) return fail("ERR_COMPARE_INVALID_TARGET", "目标不在本局");
   if (p.blind && state.betting.roundIndex <= cfg.compare.blindMinBettingRounds) {
     return fail("ERR_BLIND_COMPARE_TOO_EARLY", "闷牌者须走完 " + cfg.compare.blindMinBettingRounds + " 个下注轮后才能盲比");
   }
@@ -167,11 +170,32 @@ function validateCompare(state: GameState, action: Action): ValidationResult {
   return canPay(p, cost.total, state.config) ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
 }
 
+/**
+ * 比牌是否被规则允许(轮次 / 保护未看牌者)。
+ * **validate 与 enumerateActions 必须共用这一个判定** —— 否则会出现"合法动作列表里给了 COMPARE、
+ * apply 却拒绝"的卡死(真发生过:新加的轮次/保护规则只写在 validate 里)。
+ */
+export function compareRuleBlock(state: GameState, seat: number, targetSeat: number): string | null {
+  const cfg = state.config;
+  if (!cfg.compare.enabled) return "比牌已禁用";
+  if (!cfg.compare.anyOpponent) return "不可指定对手";
+  if (targetSeat === seat) return "不能和自己比牌";
+  const t = player(state, targetSeat);
+  if (!t || !isAlive(t)) return "目标不在本局";
+  const minRound = cfg.compare.minRound ?? 1;
+  if (minRound > 1 && state.betting.roundIndex < minRound) return "第 " + minRound + " 轮起才能比牌(现在是第 " + state.betting.roundIndex + " 轮)";
+  const protect = cfg.compare.blindTargetProtectRounds ?? 0;
+  if (protect > 0 && t.blind && state.betting.roundIndex <= protect) return "对方还没看牌:第 " + (protect + 1) + " 轮起才能比(保护闷牌者)";
+  return null;
+}
+
 function canCompare(state: GameState, p: PlayerState): boolean {
   const cfg = state.config;
   if (!cfg.compare.enabled) return false;
   if (p.blind && state.betting.roundIndex <= cfg.compare.blindMinBettingRounds) return false;
   if (cfg.compare.oncePerTurn && p.compareUsedThisTurn) return false;
+  // 至少要有"一个当前规则允许的目标",否则这个动作不该出现在合法列表里
+  if (!state.players.some((q) => q.seat !== p.seat && isAlive(q) && compareRuleBlock(state, p.seat, q.seat) === null)) return false;
   if (cfg.compare.maxPerHand !== null) {
     const used = state.events.filter((e) => e.kind === "COMPARED" && (e.aSeat === p.seat || e.bSeat === p.seat)).length;
     if (used >= cfg.compare.maxPerHand) return false;

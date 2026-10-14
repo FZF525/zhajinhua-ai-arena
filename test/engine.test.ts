@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { makeConfig, makeBalancedConfig, mergeConfig } from "../src/config.ts";
 import { createGame, aliveSeats, isAlive, player, blockadeRipe, checkInvariants, nextAliveSeat } from "../src/state.ts";
 import type { Action, GameState } from "../src/state.ts";
-import { apply, advance } from "../src/engine.ts";
+import { apply, advance, cloneState } from "../src/engine.ts";
 import { legalActions } from "../src/validate.ts";
+import { enumerateActions } from "../src/env.ts";
 import { makeAgent } from "../src/ai/index.ts";
 import { createRng } from "../src/rng.ts";
 import { cardsFromIds } from "../src/cards.ts";
@@ -590,4 +591,37 @@ test("E2E-24 欠债模式下'付不起'不再是限制:破产者仍可 CALL(并�
   const sOff = seatOf(off);
   assert.equal(legalActions(off).includes("CALL"), false, "非欠债模式下不应提供付不起的 CALL,实际 " + JSON.stringify(legalActions(off)));
   assert.equal(apply(off, { type: "CALL", seat: sOff }).ok, false, "非欠债模式下 CALL 应被拒绝");
+});
+
+test("E2E-25 一致性:enumerateActions 给出的每个动作都必须能被 apply 接受", () => {
+  // 这条是为了防一类真实事故:新规则只加在 validate 里、没加在动作枚举里 →
+  // AI 从"合法列表"里选了它、apply 却拒绝 → 对局卡死(加"比牌轮次/保护闷牌者"时真发生过)
+  const variants = [{}, { compare: { minRound: 2 } }, { compare: { blindTargetProtectRounds: 1 } }, { compare: { minRound: 2, blindTargetProtectRounds: 1 } }];
+  const names = ["EQB", "ZeroB", "Yeon", "Brian"];
+  for (const v of variants) {
+    const cfg = mergeConfig(makeBalancedConfig(4), {
+      players: { startPoints: 20000 },
+      endGame: { maxHands: 4, winAtOrAbove: 1e9, bustAtOrBelow: -1, winTakesPriorityOverBust: true },
+      ...v,
+    });
+    const st = createGame(cfg, names, 12);
+    advance(st);
+    const agents = names.map(makeAgent);
+    let steps = 0, checked = 0;
+    while (!st.gameOver && steps++ < 1200) {
+      const seat = st.turn.seat;
+      if (seat === null) break;
+      if (steps <= 80) {
+        for (const a of enumerateActions(st)) {
+          const probe = cloneState(st);
+          const r = apply(probe, a);
+          checked++;
+          assert.equal(r.ok, true, JSON.stringify(v) + " 的合法动作被 apply 拒绝:" + JSON.stringify(a) + " → " + (r.error?.code ?? ""));
+        }
+      }
+      const act = agents[seat](st, createRng(steps * 7 + 1));
+      if (!act || !apply(st, act).ok) break;
+    }
+    assert.ok(checked > 100, "应核对足够多的动作,实际 " + checked);
+  }
 });

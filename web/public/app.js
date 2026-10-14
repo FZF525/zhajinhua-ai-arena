@@ -438,6 +438,10 @@ function readNumbers() {
   if (Number.isFinite(hands)) out.maxHands = hands;
   const debt = $("num-debt");
   if (debt && debt.checked) out.allowDebt = true;
+  const cr = pick("num-cmp-round"), cp = pick("num-cmp-protect"), cc = pick("num-cmp-cost");
+  if (Number.isFinite(cr)) out.compareMinRound = cr;
+  if (Number.isFinite(cp)) out.blindTargetProtectRounds = cp;
+  if (Number.isFinite(cc)) out.compareCostMultiplier = cc;
   return out;
 }
 function applyNumbers(n) {
@@ -446,6 +450,7 @@ function applyNumbers(n) {
   set("num-bust", n?.bustAtOrBelow); set("num-hands", n?.maxHands);
   const debt = $("num-debt");
   if (debt) debt.checked = n?.allowDebt === true;
+  set("num-cmp-round", n?.compareMinRound); set("num-cmp-protect", n?.blindTargetProtectRounds); set("num-cmp-cost", n?.compareCostMultiplier);
 }
 let numberIssues = [];   // 服务端对自定义数值的校验结果
 /** 底部提示:当前生效数值 + 校验问题 + 阈值差与场次长度的实测经验 */
@@ -509,7 +514,7 @@ $("curtain-btn").onclick = () => {                     // 手动遮屏(单人时
 $("table").onchange = () => markDirty();
 $("seats").onchange = () => markDirty();
 $("num-debt").onchange = () => markDirty();
-for (const id of ["num-ante", "num-start", "num-win", "num-bust", "num-hands"]) {
+for (const id of ["num-ante", "num-start", "num-win", "num-bust", "num-hands", "num-cmp-round", "num-cmp-protect", "num-cmp-cost"]) {
   const el = $(id);
   if (el) el.oninput = () => markDirty();
 }

@@ -42,6 +42,10 @@ export interface GameConfig {
     anyOpponent: boolean;
     oncePerTurn: boolean;
     blindMinBettingRounds: number;
+    /** 最早允许比牌的轮次(1 = 第 1 轮就能比;2 = 第 1 轮禁止比牌) */
+    minRound: number;
+    /** 保护"还没看牌的人":目标走完这么多轮之前,不允许被比牌(0 = 不保护) */
+    blindTargetProtectRounds: number;
     blindCompareBreaksBlind: boolean;
     loserFolds: boolean;
     tieBehavior: "CONTINUE";
@@ -93,6 +97,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     anyOpponent: true,
     oncePerTurn: true,
     blindMinBettingRounds: 3,
+    minRound: 1,
+    blindTargetProtectRounds: 0,
     blindCompareBreaksBlind: false,
     loserFolds: true,
     tieBehavior: "CONTINUE",
@@ -194,6 +200,12 @@ export interface NumberOverrides {
   ante?: number;
   /** 欠债模式:允许分值为负(仍受破产阈值约束) */
   allowDebt?: boolean;
+  /** 最早可比轮次(2 = 第 1 轮禁止比牌) */
+  compareMinRound?: number;
+  /** 保护未看牌者:目标走完这么多轮前不可被比(0 = 不保护) */
+  blindTargetProtectRounds?: number;
+  /** 比牌费倍率(基准 2;调大 = 比牌更贵,狙击更少) */
+  compareCostMultiplier?: number;
   /** 以下为绝对值,原样生效 */
   startPoints?: number;
   winAtOrAbove?: number;
@@ -224,6 +236,11 @@ export function applyNumberOverrides(base: GameConfig, ov: NumberOverrides): Gam
   if (typeof ov.bustAtOrBelow === "number" && Number.isFinite(ov.bustAtOrBelow)) eg.bustAtOrBelow = Math.round(ov.bustAtOrBelow);
   if (ov.maxHands !== undefined) eg.maxHands = ov.maxHands === null ? null : Math.max(1, Math.round(Number(ov.maxHands)));
   if (Object.keys(eg).length) patch.endGame = eg;
+  const cmp: Record<string, unknown> = {};
+  if (typeof ov.compareMinRound === "number" && Number.isFinite(ov.compareMinRound)) cmp.minRound = Math.max(1, Math.round(ov.compareMinRound));
+  if (typeof ov.blindTargetProtectRounds === "number" && Number.isFinite(ov.blindTargetProtectRounds)) cmp.blindTargetProtectRounds = Math.max(0, Math.round(ov.blindTargetProtectRounds));
+  if (typeof ov.compareCostMultiplier === "number" && Number.isFinite(ov.compareCostMultiplier) && ov.compareCostMultiplier > 0) cmp.costMultiplier = ov.compareCostMultiplier;
+  if (Object.keys(cmp).length) patch.compare = cmp;
   return Object.keys(patch).length ? mergeConfig(cfg, patch) : cfg;
 }
 

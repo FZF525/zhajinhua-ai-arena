@@ -56,6 +56,9 @@
   <span class="ctl">破产阈值 <input id="num-bust" type="number" step="100" placeholder="预制 0"></span>
   <span class="ctl">局数上限 <input id="num-hands" type="number" min="1" step="1" placeholder="预设"></span>
   <label class="ctl" title="允许把积分打到负数(欠债);何时出局由破产阈值决定"><input id="num-debt" type="checkbox"> 允许欠债(分值可为负)</label>
+  <span class="ctl">比牌最早轮次 <input id="num-cmp-round" type="number" min="1" step="1" placeholder="1" title="2 = 第 1 轮禁止比牌(防狙击)"></span>
+  <span class="ctl">未看牌保护轮数 <input id="num-cmp-protect" type="number" min="0" step="1" placeholder="0" title="1 = 还没看牌的人第 1 轮不能被比(防'没看牌就被干掉')"></span>
+  <span class="ctl">比牌费倍率 <input id="num-cmp-cost" type="number" min="1" step="1" placeholder="2" title="基准 2;调大 = 比牌更贵,狙击杀价上升"></span>
   <span class="dim">留空即用分场预设。底注 = 刻度(整表等比缩放,比例不变);初始积分 / 阈值 / 局数上限 = 绝对值</span>
 </div>
 <div id="thresh-hint" class="settingline"></div>

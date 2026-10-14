@@ -28,7 +28,7 @@ test("HTML-03 页头人数控件与座位面板是两个不同元素", () => {
 
 test("HTML-04 关键控件齐全", () => {
   for (const id of ["table", "new", "curtain-btn", "reset", "seats", "settingline", "playerlist", "pool", "ops", "hint", "log",
-                  "god", "save", "replay", "replaybar", "rpl-list", "rpl-prev", "rpl-next", "rpl-play", "rpl-range", "rpl-step", "rpl-key", "rpl-exit", "advanced", "num-ante", "num-start", "num-win", "num-bust", "num-hands", "num-debt", "thresh-hint"]) {
+                  "god", "save", "replay", "replaybar", "rpl-list", "rpl-prev", "rpl-next", "rpl-play", "rpl-range", "rpl-step", "rpl-key", "rpl-exit", "advanced", "num-ante", "num-start", "num-win", "num-bust", "num-hands", "num-debt", "num-cmp-round", "num-cmp-protect", "num-cmp-cost", "thresh-hint"]) {
     assert.ok(html.includes('id="' + id + '"'), "缺少 #" + id);
   }
 });
