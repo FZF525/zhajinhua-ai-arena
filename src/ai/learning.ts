@@ -89,7 +89,8 @@ export function zerobLegal(s: GameState): Array<{ action: Action; kind: ZeroBAct
   return out;
 }
 
-function bestAction(qs: number[], legal: Array<{ kind: ZeroBAction }>): number {
+/** 取 Q 值最高的合法动作下标(实验脚本与决策共用) */
+export function bestAction(qs: number[], legal: Array<{ kind: ZeroBAction }>): number {
   let bi = 0, bv = -Infinity;
   legal.forEach((l, i) => {
     const v = qs[ZEROB_ACTIONS.indexOf(l.kind)] ?? 0;
