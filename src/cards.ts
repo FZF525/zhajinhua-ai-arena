@@ -18,16 +18,16 @@ export interface SuitDef {
 }
 
 export const SUITS: readonly SuitDef[] = [
-  { id: "HEART",   family: "RED",   symbol: "\u2665",  color: "#FF0000", bg: "#FFFFFF", cn: "红心" },
-  { id: "DIAMOND", family: "RED",   symbol: "\u2666",  color: "#FF0000", bg: "#FFFFFF", cn: "方块" },
-  { id: "SPADE",   family: "BLACK", symbol: "\u2660",  color: "#000000", bg: "#FFFFFF", cn: "黑桃" },
-  { id: "CLUB",    family: "BLACK", symbol: "\u2663",  color: "#000000", bg: "#FFFFFF", cn: "梅花" },
-  // 末尾的 \uFE0E 是"文本呈现"变体选择符:这几个码点默认按 emoji 渲染(全宽、彩色),
-  // 会让"符号 + 10"在卡片里换行;加 VS15 后与 ♠♥♦♣ 一样是窄的文本符号(实测差一倍宽度)
-  { id: "SNOW",    family: "BLUE",  symbol: "\u2744\uFE0E",    color: "#0077FF", bg: "#D6E9FF", cn: "雪花" },
-  { id: "DROPLET", family: "BLUE",  symbol: "\u{1F4A7}\uFE0E", color: "#0077FF", bg: "#EAF4FF", cn: "水滴" },
-  { id: "STAR",    family: "GOLD",  symbol: "\u2B50\uFE0E",    color: "#FFB300", bg: "#FFF3D6", cn: "星" },
-  { id: "MOON",    family: "GOLD",  symbol: "\u{1F319}\uFE0E", color: "#FFB300", bg: "#E8E8E8", cn: "月牙" }
+  // 末尾 \uFE0F 是"emoji 呈现"变体选择符:8 个花色统一按彩色 emoji 渲染(视觉一致、好辨认);
+  // 卡片因此要更宽(见 style.css 的 .card),并配 white-space:nowrap —— 否则"符号 + 10"会断成两行
+  { id: "HEART",   family: "RED",   symbol: "\u2665\uFE0F", color: "#FF0000", bg: "#FFFFFF", cn: "红心" },
+  { id: "DIAMOND", family: "RED",   symbol: "\u2666\uFE0F", color: "#FF0000", bg: "#FFFFFF", cn: "方块" },
+  { id: "SPADE",   family: "BLACK", symbol: "\u2660\uFE0F", color: "#000000", bg: "#FFFFFF", cn: "黑桃" },
+  { id: "CLUB",    family: "BLACK", symbol: "\u2663\uFE0F", color: "#000000", bg: "#FFFFFF", cn: "梅花" },
+  { id: "SNOW",    family: "BLUE",  symbol: "\u2744\uFE0F",    color: "#0077FF", bg: "#D6E9FF", cn: "雪花" },
+  { id: "DROPLET", family: "BLUE",  symbol: "\u{1F4A7}\uFE0F", color: "#0077FF", bg: "#EAF4FF", cn: "水滴" },
+  { id: "STAR",    family: "GOLD",  symbol: "\u2B50\uFE0F",    color: "#FFB300", bg: "#FFF3D6", cn: "星" },
+  { id: "MOON",    family: "GOLD",  symbol: "\u{1F319}\uFE0F", color: "#FFB300", bg: "#E8E8E8", cn: "月牙" }
 ];
 
 export const FAMILY_LABEL: Record<ColorFamily, string> = {
