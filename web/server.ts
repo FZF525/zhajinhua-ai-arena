@@ -4,7 +4,7 @@ import http from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "node:path";
-import { makeBalancedConfig, makeTableConfig, applyNumberOverrides, TABLE_PRESETS } from "../src/config.ts";
+import { makeBalancedConfig, makeTableConfig, applyNumberOverrides, validateNumbers, TABLE_PRESETS } from "../src/config.ts";
 import type { NumberOverrides } from "../src/config.ts";
 import type { GameConfig, TableSize } from "../src/config.ts";
 import { createGame, aliveSeats, player, isAlive, blockadeRipe } from "../src/state.ts";
@@ -70,6 +70,13 @@ export function buildConfig(players: number, table: string, ov: NumberOverrides 
   const n = Math.max(2, Math.min(6, players));
   const base = table === "small" || table === "big" ? makeTableConfig(table as TableSize) : makeBalancedConfig(n);
   return applyNumberOverrides(base, ov);
+}
+
+/** 校验自定义数值(基于该桌的预设);有 error 就不该开局 */
+export function checkNumbers(players: number, table: string, ov: NumberOverrides) {
+  const n = Math.max(2, Math.min(6, players));
+  const base = table === "small" || table === "big" ? makeTableConfig(table as TableSize) : makeBalancedConfig(n);
+  return validateNumbers(base, ov);
 }
 
 function newGame(players: number, table: string, seed?: number, agentSpec?: Array<string | null>, ov: NumberOverrides = {}): GameState {
@@ -145,6 +152,12 @@ const server = http.createServer(async (req, res) => {
   try {
     if (path === "/api/new" && req.method === "POST") {
       const body = await readBody(req);
+      const ov = (body.numbers && typeof body.numbers === "object" ? body.numbers : {}) as NumberOverrides;
+      const issues = checkNumbers(Number(body.players ?? 3), String(body.table ?? "auto"), ov);
+      const errors = issues.filter((i) => i.level === "error");
+      if (errors.length) {
+        return send(res, 200, JSON.stringify({ ok: false, error: errors[0].message, issues, view: game ? viewWithAgents() : null }));
+      }
       game = newGame(Number(body.players ?? 3), String(body.table ?? "auto"),
         body.seed === undefined ? undefined : Number(body.seed),
         Array.isArray(body.agents) ? body.agents : undefined,

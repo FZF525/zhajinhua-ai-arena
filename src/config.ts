@@ -215,6 +215,34 @@ export function applyNumberOverrides(base: GameConfig, ov: NumberOverrides): Gam
   return Object.keys(patch).length ? mergeConfig(cfg, patch) : cfg;
 }
 
+export interface NumberIssue { field: string; level: "error" | "warn"; message: string }
+
+/**
+ * 校验用户自定义数值 —— 防止"乱填出一个没法玩的局"。
+ * 真事:初始积分=1 而底注=12 → 全员付不起底注 → 第 1 局就"全员破产"结束,界面一片 1 分。
+ */
+export function validateNumbers(base: GameConfig, ov: NumberOverrides): NumberIssue[] {
+  const issues: NumberIssue[] = [];
+  const ante = typeof ov.ante === "number" && Number.isFinite(ov.ante) && ov.ante > 0 ? ov.ante : base.ante.amount;
+  const sp = typeof ov.startPoints === "number" && Number.isFinite(ov.startPoints) ? ov.startPoints : base.players.startPoints;
+  const win = typeof ov.winAtOrAbove === "number" && Number.isFinite(ov.winAtOrAbove) ? ov.winAtOrAbove : base.endGame.winAtOrAbove;
+  const bust = typeof ov.bustAtOrBelow === "number" && Number.isFinite(ov.bustAtOrBelow) ? ov.bustAtOrBelow : base.endGame.bustAtOrBelow;
+  const maxHands = ov.maxHands === undefined ? base.endGame.maxHands : ov.maxHands;
+
+  if (typeof ov.ante === "number" && (!Number.isFinite(ov.ante) || ov.ante <= 0)) issues.push({ field: "ante", level: "error", message: "底注必须为正整数" });
+  if (typeof ov.startPoints === "number" && ov.startPoints <= 0) issues.push({ field: "startPoints", level: "error", message: "初始积分必须为正" });
+  if (sp < ante) issues.push({ field: "startPoints", level: "error", message: "初始积分(" + sp + ")小于底注(" + ante + "):开局所有人都付不起底注,会立刻全员破产。至少设成 " + ante * 20 + " 以上。" });
+  else if (sp < ante * 20) issues.push({ field: "startPoints", level: "warn", message: "初始积分只有底注的 " + Math.round(sp / ante) + " 倍,开局很容易破产;建议至少 " + ante * 100 + "(=100 倍底注)。" });
+  if (win <= sp) issues.push({ field: "winAtOrAbove", level: "error", message: "胜利阈值(" + win + ")必须大于初始积分(" + sp + "),否则开局即达成。" });
+  else {
+    const gap = win - sp;
+    if (gap < ante * 100) issues.push({ field: "winAtOrAbove", level: "warn", message: "阈值差只有底注的 " + Math.round(gap / ante) + " 倍,实测这种比例常常 1~2 手就结束;想打 20 手左右,让差值达到底注的 500~2000 倍。" });
+  }
+  if (bust >= sp) issues.push({ field: "bustAtOrBelow", level: "error", message: "破产阈值(" + bust + ")必须小于初始积分(" + sp + "),否则开局即出局。" });
+  if (maxHands !== null && (typeof maxHands !== "number" || !Number.isFinite(maxHands) || maxHands < 1)) issues.push({ field: "maxHands", level: "error", message: "局数上限必须是 ≥1 的整数,或留空表示不限" });
+  return issues;
+}
+
 /** 实测拟合:目标约 40 局/场时各人数推荐的缩放系数(人数越多、底池越大,所需 k 越小) */
 export const SCALE_BY_PLAYERS: Record<number, number> = { 2: 70, 3: 40, 4: 25, 5: 16, 6: 10 };
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyNumberOverrides, makeConfig, makeTableConfig, makeBalancedConfig, suggestScale, scaleEconomy, validateConfig, DEFAULT_CONFIG, TABLE_PRESETS } from "../src/config.ts";
+import { validateNumbers, applyNumberOverrides, makeConfig, makeTableConfig, makeBalancedConfig, suggestScale, scaleEconomy, validateConfig, DEFAULT_CONFIG, TABLE_PRESETS } from "../src/config.ts";
 
 test("CFG-01 默认配置合法(初始 20000 / 阈值 40000 / maxHands 20)", () => {
   assert.deepEqual(validateConfig(DEFAULT_CONFIG), []);
@@ -104,4 +104,27 @@ test("CFG-08 自定义底注=刻度:整张费用表等比缩放,比例保持不�
   const noAnte = applyNumberOverrides(base, { startPoints: 99999 });
   assert.equal(noAnte.ante.amount, base.ante.amount);
   assert.equal(noAnte.betting.seenRate, base.betting.seenRate);
+});
+
+test("CFG-09 自定义数值校验:拦住\"乱填\"导致的坏局", () => {
+  const base = makeBalancedConfig(6);
+  // 真事:初始积分 1 而底注 12 → 全员付不起底注,第 1 局就"全员破产"
+  const broken = validateNumbers(base, { ante: 12, startPoints: 1, winAtOrAbove: 100000, bustAtOrBelow: -100000, maxHands: 25 });
+  const errs = broken.filter((i) => i.level === "error");
+  assert.ok(errs.some((i) => i.field === "startPoints"), "初始积分 < 底注 必须报错");
+  assert.ok(errs[0].message.includes("底注"), "错误信息要说清原因");
+
+  // 阈值 ≤ 初始积分 / 破产阈值 ≥ 初始积分 / 局数上限非法
+  assert.ok(validateNumbers(base, { startPoints: 20000, winAtOrAbove: 20000 }).some((i) => i.field === "winAtOrAbove" && i.level === "error"));
+  assert.ok(validateNumbers(base, { startPoints: 20000, bustAtOrBelow: 20000 }).some((i) => i.field === "bustAtOrBelow" && i.level === "error"));
+  assert.ok(validateNumbers(base, { maxHands: 0 }).some((i) => i.field === "maxHands" && i.level === "error"));
+  assert.ok(validateNumbers(base, { ante: 0 }).some((i) => i.field === "ante" && i.level === "error"));
+
+  // 阈值差太小 → 只是"警告",不拦
+  const warnOnly = validateNumbers(base, { winAtOrAbove: base.players.startPoints + base.ante.amount * 50 });
+  assert.equal(warnOnly.filter((i) => i.level === "error").length, 0);
+  assert.ok(warnOnly.some((i) => i.level === "warn" && i.field === "winAtOrAbove"));
+
+  // 默认配置本身无任何问题
+  assert.deepEqual(validateNumbers(base, {}), []);
 });

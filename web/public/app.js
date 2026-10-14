@@ -432,10 +432,20 @@ function applyNumbers(n) {
   set("num-ante", n?.ante); set("num-start", n?.startPoints); set("num-win", n?.winAtOrAbove);
   set("num-bust", n?.bustAtOrBelow); set("num-hands", n?.maxHands);
 }
-/** 底部提示:当前生效数值 + 阈值差与场次长度的实测经验 */
+let numberIssues = [];   // 服务端对自定义数值的校验结果
+/** 底部提示:当前生效数值 + 校验问题 + 阈值差与场次长度的实测经验 */
 function numbersHint(v) {
   const box = $("thresh-hint");
   if (!box || !v) return;
+  const bad = numberIssues.filter((i) => i.level === "error");
+  const warn = numberIssues.filter((i) => i.level === "warn");
+  if (bad.length || warn.length) {
+    box.textContent = (bad.length ? "❌ " + bad.map((i) => i.message).join("　❌ ") : "") +
+      (warn.length ? (bad.length ? "　" : "") + "⚠ " + warn.map((i) => i.message).join("　⚠ ") : "");
+    box.style.color = bad.length ? "#e2857e" : "#e8c56b";
+    return;
+  }
+  box.style.color = "";
   box.textContent = "当前生效:底注 " + v.fees.ante + " 分 · 跟注 " + v.fees.seen + "/" + v.fees.blind + " · 胜利阈值 " + v.winAtOrAbove + " · 局数上限 " + (v.maxHands ?? "不限") +
     "　|　底注是刻度:填了它会把整张费用表等比缩放(跟注/闷注/换牌/踢牌同比例),不破坏玩法平衡。" +
     "　|　实战经验:阈值差和注码刻度一起决定场次长度 —— 6 人自适应分场实测 差 2000≈1 手 / 5000≈2 手 / 10000≈6 手 / 20000≈20 手。";
@@ -454,6 +464,17 @@ function settingsKey() { return playerCount() + "|" + $("table").value + "|" + s
 async function newGame() {
   const req = { players: playerCount(), table: $("table").value, agents: selectedAgents(), numbers: readNumbers() };
   const r = await api("/api/new", req);
+  numberIssues = Array.isArray(r.issues) ? r.issues : [];
+  if (!r.ok) {
+    const box = $("thresh-hint");
+    if (box) {
+      box.style.color = "#e2857e";
+      box.textContent = "❌ 参数有问题,没有开局:" + (r.error ?? "") +
+        (numberIssues.length ? "　" + numberIssues.filter((i) => i.level === "error").map((i) => i.message).join("　") : "");
+    }
+    if (view) render();
+    return;
+  }
   if (r.ok) {
     view = r.view; pending = null; sel = { take: null }; lastActor = null; aiLog = [];
     currentSettings = settingsKey();
