@@ -5,7 +5,7 @@
 //   node src/cli.ts --selftest --games=100
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { makeTableConfig, makeBalancedConfig, mergeConfig, TABLE_PRESETS } from "./config.ts";
+import { makeTableConfig, makeBalancedConfig, applyNumberOverrides, TABLE_PRESETS } from "./config.ts";
 import type { TableSize } from "./config.ts";
 import { createGame, aliveSeats, isAlive, player, checkInvariants, blockadeRipe } from "./state.ts";
 import type { Action, GameState } from "./state.ts";
@@ -30,23 +30,18 @@ const has = (name: string): boolean => argv.includes("--" + name);
 const tableArg = (argv.find((a) => a.startsWith("--table="))?.split("=")[1] ?? "auto") as TableSize | "auto";
 
 /** 命令行自定义数值(--ante / --start / --win / --bust / --max-hands):在分场预设之上原样覆盖 */
-function numberOverrides(): Record<string, unknown> {
+function numberOverrides() {
   const hasFlag = (n: string) => argv.some((a) => a.startsWith("--" + n + "="));
-  const patch: Record<string, unknown> = {};
-  const ante = flag("ante", 0), start = flag("start", 0), win = flag("win", 0), hands = flag("max-hands", 0);
-  if (hasFlag("ante") && ante > 0) patch.ante = { amount: Math.round(ante) };
-  if (hasFlag("start") && start > 0) patch.players = { startPoints: Math.round(start) };
-  const eg: Record<string, unknown> = {};
-  if (hasFlag("win")) eg.winAtOrAbove = Math.round(win);
-  if (hasFlag("bust")) eg.bustAtOrBelow = Math.round(flag("bust", 0));
-  if (hasFlag("max-hands") && hands > 0) eg.maxHands = Math.round(hands);
-  if (Object.keys(eg).length) patch.endGame = eg;
-  return patch;
+  const ov: Record<string, number> = {};
+  if (hasFlag("ante")) ov.ante = flag("ante", 0);
+  if (hasFlag("start")) ov.startPoints = flag("start", 0);
+  if (hasFlag("win")) ov.winAtOrAbove = flag("win", 0);
+  if (hasFlag("bust")) ov.bustAtOrBelow = flag("bust", 0);
+  if (hasFlag("max-hands")) ov.maxHands = flag("max-hands", 0);
+  return ov;
 }
-const withNumbers = <T>(cfg: T): T => {
-  const p = numberOverrides();
-  return Object.keys(p).length ? (mergeConfig(cfg, p) as T) : cfg;
-};
+const withNumbers = <T extends ReturnType<typeof makeTableConfig>>(cfg: T): T =>
+  applyNumberOverrides(cfg, numberOverrides()) as T;
 if (tableArg !== "auto" && !TABLE_PRESETS[tableArg]) {
   console.error("未知分场: " + tableArg + "(可选 small / big,缺省 auto 按人数自适应)");
   process.exit(1);

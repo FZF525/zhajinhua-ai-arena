@@ -4,7 +4,8 @@ import http from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "node:path";
-import { makeBalancedConfig, makeTableConfig, mergeConfig, TABLE_PRESETS } from "../src/config.ts";
+import { makeBalancedConfig, makeTableConfig, applyNumberOverrides, TABLE_PRESETS } from "../src/config.ts";
+import type { NumberOverrides } from "../src/config.ts";
 import type { GameConfig, TableSize } from "../src/config.ts";
 import { createGame, aliveSeats, player, isAlive, blockadeRipe } from "../src/state.ts";
 import type { Action, GameState } from "../src/state.ts";
@@ -62,30 +63,13 @@ function agentNames(): Array<string | null> {
   return agents.map((a) => (a ? "AI" : null));
 }
 
-export interface NumberOverrides {
-  ante?: number;
-  startPoints?: number;
-  winAtOrAbove?: number;
-  bustAtOrBelow?: number;
-  maxHands?: number | null;
-}
+export type { NumberOverrides };
 
-/** 分场预设 + 自定义数值覆盖:自定义值**原样生效**,不参与等比缩放 */
+/** 分场预设 + 自定义数值:底注=刻度(整表等比缩放),其余=绝对值 */
 export function buildConfig(players: number, table: string, ov: NumberOverrides = {}): GameConfig {
   const n = Math.max(2, Math.min(6, players));
   const base = table === "small" || table === "big" ? makeTableConfig(table as TableSize) : makeBalancedConfig(n);
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
-  const patch: Record<string, unknown> = {};
-  const ante = num(ov.ante), sp = num(ov.startPoints);
-  if (ante !== undefined && ante > 0) patch.ante = { amount: Math.round(ante) };
-  if (sp !== undefined && sp > 0) patch.players = { startPoints: Math.round(sp) };
-  const eg: Record<string, unknown> = {};
-  const win = num(ov.winAtOrAbove), bust = num(ov.bustAtOrBelow);
-  if (win !== undefined) eg.winAtOrAbove = Math.round(win);
-  if (bust !== undefined) eg.bustAtOrBelow = Math.round(bust);
-  if (ov.maxHands !== undefined) eg.maxHands = ov.maxHands === null ? null : Math.max(1, Math.round(Number(ov.maxHands)));
-  if (Object.keys(eg).length) patch.endGame = eg;
-  return Object.keys(patch).length ? mergeConfig(base, patch) : base;
+  return applyNumberOverrides(base, ov);
 }
 
 function newGame(players: number, table: string, seed?: number, agentSpec?: Array<string | null>, ov: NumberOverrides = {}): GameState {

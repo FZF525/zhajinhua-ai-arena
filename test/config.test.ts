@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeConfig, makeTableConfig, makeBalancedConfig, suggestScale, scaleEconomy, validateConfig, DEFAULT_CONFIG, TABLE_PRESETS } from "../src/config.ts";
+import { applyNumberOverrides, makeConfig, makeTableConfig, makeBalancedConfig, suggestScale, scaleEconomy, validateConfig, DEFAULT_CONFIG, TABLE_PRESETS } from "../src/config.ts";
 
 test("CFG-01 默认配置合法(初始 20000 / 阈值 40000 / maxHands 20)", () => {
   assert.deepEqual(validateConfig(DEFAULT_CONFIG), []);
@@ -80,4 +80,28 @@ test("CFG-07 按人数推荐缩放系数:人数越多,所需 k 越小", () => {
   const c = makeBalancedConfig(6);
   assert.equal(c.ante.amount, 10);
   assert.equal(TABLE_PRESETS.small.scale, 10);
+});
+
+test("CFG-08 自定义底注=刻度:整张费用表等比缩放,比例保持不变", () => {
+  const base = makeBalancedConfig(6);
+  const half = applyNumberOverrides(base, { ante: base.ante.amount / 2 });
+  assert.equal(half.ante.amount, Math.round(base.ante.amount / 2));
+  assert.equal(half.betting.seenRate, Math.round(base.betting.seenRate / 2));
+  assert.equal(half.betting.blindRate, Math.round(base.betting.blindRate / 2));
+  assert.equal(half.kick.fee, Math.max(1, Math.round(base.kick.fee / 2)));
+  assert.deepEqual(half.exchange.fees, base.exchange.fees.map((x) => Math.max(1, Math.round(x / 2))));
+  // 关键:底注/跟注的比例不变(这正是"只改底注会变形"要防的)
+  assert.equal(half.betting.seenRate / half.ante.amount, base.betting.seenRate / base.ante.amount);
+
+  // 绝对值覆盖不受缩放影响
+  const abs = applyNumberOverrides(base, { ante: base.ante.amount * 2, startPoints: 12345, winAtOrAbove: 20000, maxHands: 7 });
+  assert.equal(abs.ante.amount, Math.round(base.ante.amount * 2));
+  assert.equal(abs.players.startPoints, 12345);
+  assert.equal(abs.endGame.winAtOrAbove, 20000);
+  assert.equal(abs.endGame.maxHands, 7);
+
+  // 不填底注 → 完全不缩放
+  const noAnte = applyNumberOverrides(base, { startPoints: 99999 });
+  assert.equal(noAnte.ante.amount, base.ante.amount);
+  assert.equal(noAnte.betting.seenRate, base.betting.seenRate);
 });

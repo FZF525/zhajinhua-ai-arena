@@ -182,6 +182,39 @@ export function makeTableConfig(size: TableSize, extra?: unknown): GameConfig {
   return scaleEconomy(makeConfig(extra), preset.scale);
 }
 
+export interface NumberOverrides {
+  /** 底注 —— 视作"刻度":填了它会把整张费用表等比缩放,保持底注/费率/费用的比例不变 */
+  ante?: number;
+  /** 以下为绝对值,原样生效 */
+  startPoints?: number;
+  winAtOrAbove?: number;
+  bustAtOrBelow?: number;
+  maxHands?: number | null;
+}
+
+/**
+ * 应用用户自定义数值。
+ * 关键:**底注是刻度不是普通数值** —— 只改底注而不动费率,等于偷偷改变玩法平衡
+ * (实测:底注相对费率变小 = 跟注变便宜 = 大家一路跟到底)。所以底注走整表等比缩放。
+ */
+export function applyNumberOverrides(base: GameConfig, ov: NumberOverrides): GameConfig {
+  let cfg = base;
+  const ante = typeof ov.ante === "number" && Number.isFinite(ov.ante) ? ov.ante : undefined;
+  if (ante !== undefined && ante > 0) {
+    const k = ante / base.ante.amount;
+    if (Math.abs(k - 1) > 1e-9) cfg = scaleEconomy(cfg, k);
+  }
+  const patch: Record<string, unknown> = {};
+  const sp = typeof ov.startPoints === "number" && Number.isFinite(ov.startPoints) ? ov.startPoints : undefined;
+  if (sp !== undefined && sp > 0) patch.players = { startPoints: Math.round(sp) };
+  const eg: Record<string, unknown> = {};
+  if (typeof ov.winAtOrAbove === "number" && Number.isFinite(ov.winAtOrAbove)) eg.winAtOrAbove = Math.round(ov.winAtOrAbove);
+  if (typeof ov.bustAtOrBelow === "number" && Number.isFinite(ov.bustAtOrBelow)) eg.bustAtOrBelow = Math.round(ov.bustAtOrBelow);
+  if (ov.maxHands !== undefined) eg.maxHands = ov.maxHands === null ? null : Math.max(1, Math.round(Number(ov.maxHands)));
+  if (Object.keys(eg).length) patch.endGame = eg;
+  return Object.keys(patch).length ? mergeConfig(cfg, patch) : cfg;
+}
+
 /** 实测拟合:目标约 40 局/场时各人数推荐的缩放系数(人数越多、底池越大,所需 k 越小) */
 export const SCALE_BY_PLAYERS: Record<number, number> = { 2: 70, 3: 40, 4: 25, 5: 16, 6: 10 };
 

@@ -436,8 +436,9 @@ function applyNumbers(n) {
 function numbersHint(v) {
   const box = $("thresh-hint");
   if (!box || !v) return;
-  box.textContent = "当前生效:底注 " + v.fees.ante + " 分 · 胜利阈值 " + v.winAtOrAbove + " · 局数上限 " + (v.maxHands ?? "不限") +
-    "　|　实战经验:阈值差(阈值 − 初始积分)决定一场多长 —— 6 人局实测 差 1000≈15 手,2000≈50 手,5000≈230 手;差太小秒结束,差太大打不完。";
+  box.textContent = "当前生效:底注 " + v.fees.ante + " 分 · 跟注 " + v.fees.seen + "/" + v.fees.blind + " · 胜利阈值 " + v.winAtOrAbove + " · 局数上限 " + (v.maxHands ?? "不限") +
+    "　|　底注是刻度:填了它会把整张费用表等比缩放(跟注/闷注/换牌/踢牌同比例),不破坏玩法平衡。" +
+    "　|　实战经验:阈值差和注码刻度一起决定场次长度 —— 6 人自适应分场实测 差 2000≈1 手 / 5000≈2 手 / 10000≈6 手 / 20000≈20 手。";
 }
 
 const LS_KEY = "zjh.settings.v1";
