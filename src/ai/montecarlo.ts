@@ -26,9 +26,13 @@ export interface McProfile {
 }
 
 export const MC_PROFILES: Record<string, McProfile> = {
-  May: { name: "May", label: "稳健", rollouts: 24, rolloutWith: "Sam", base: "Baozi", riskBonus: 0.2, maxSteps: 140 },
-  Yeon: { name: "Yeon", label: "均衡", rollouts: 16, rolloutWith: "Sam", base: "Sam", riskBonus: 0.8, maxSteps: 120 },
-  Brian: { name: "Brian", label: "激进", rollouts: 10, rolloutWith: "Sam", base: "Lucas", riskBonus: 2.0, maxSteps: 100 }
+  // maxSteps 必须够"一手打完":实测有牌局 CALL 之后还要 111 步才结算。
+  // 原值 100/120/140 会把 rollout 截断在半局,于是"继续打"的收益被算成"已投入全亏",
+  // 强牌(四条)反而显示期望为负 → MC 会弃掉四条把自己整死(已修,见 AI-13)。
+  // 上限调高不显著增加成本:结算即停,大多数一局 40~80 步就结束。
+  May: { name: "May", label: "稳健", rollouts: 24, rolloutWith: "Sam", base: "Baozi", riskBonus: 0.2, maxSteps: 600 },
+  Yeon: { name: "Yeon", label: "均衡", rollouts: 16, rolloutWith: "Sam", base: "Sam", riskBonus: 0.8, maxSteps: 600 },
+  Brian: { name: "Brian", label: "激进", rollouts: 10, rolloutWith: "Sam", base: "Lucas", riskBonus: 2.0, maxSteps: 600 }
 };
 
 function hashAction(a: Action): number {
@@ -53,11 +57,18 @@ export function mcDecide(st: GameState, rng: Rng, prof: McProfile): { action: Ac
   const trace: McTrace[] = [];
   let best = candidates[0];
   let bestScore = -Infinity;
+  let anySettled = false;
   for (const a of candidates) {
     const sim = simulateAction(st, a, seat, rollPolicy, prof.rollouts, (seedBase ^ hashAction(a)) >>> 0, prof.maxSteps);
     const score = sim.mean + prof.riskBonus * (sim.winRate - 0.5) * scale;
     trace.push({ action: a, mean: sim.mean, winRate: sim.winRate, samples: sim.samples });
+    if (sim.samples > 0) anySettled = true;
     if (score > bestScore) { bestScore = score; best = a; }
+  }
+  // 一个样本都没结算(极端长局)→ 退回启发式,绝不因为"没打出来"就弃牌
+  if (!anySettled) {
+    const fallback = makeHeuristic(prof.base)(st, rng);
+    if (fallback) return { action: fallback, trace };
   }
   return { action: best, trace };
 }

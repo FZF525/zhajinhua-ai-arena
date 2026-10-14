@@ -166,6 +166,9 @@ export function simulateAction(
     const world = determinize(state, seat, rng);
     if (!apply(world, action, { dealNextHand: false }).ok) continue;
     const done = rolloutHand(world, policy, rng, maxSteps);
+    // 只统计"打到结算"的样本:被 maxSteps 截断的半局里,已投入的筹码还没收回,
+    // 收益会是假的巨亏(实测把四条算成 -2538),会把强牌变成"弃牌最优"。
+    if (done.phase === "BETTING") continue;
     const gain = player(done, seat).points - before;
     sum += gain;
     if (gain > 0) wins++;

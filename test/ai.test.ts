@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { makeConfig, makeBalancedConfig, mergeConfig } from "../src/config.ts";
 import { createGame, checkInvariants, player, isAlive } from "../src/state.ts";
 import { apply, advance } from "../src/engine.ts";
-import { makeAgent, AI_NAMES, AGENTS, PROFILES, MC_PROFILES } from "../src/ai/index.ts";
+import { makeAgent, AI_NAMES, AGENTS, PROFILES, MC_PROFILES, MC_NAMES } from "../src/ai/index.ts";
+import { makeHeuristic } from "../src/ai/heuristic.ts";
 import { determinize, enumerateActions, simulateAction, exchangeGain } from "../src/env.ts";
 import { createRng } from "../src/rng.ts";
 import { mcDecide } from "../src/ai/montecarlo.ts";
@@ -258,4 +259,27 @@ test("AI-12 欠债模式下'初始积分=1'也不能让 AI 变被动(名义筹�
   const off = mk(false, 200);
   off.players[off.turn.seat!].points = -300;
   assert.equal(legalActions(off).includes("CALL"), false, "非欠债模式下付不起就不该有 CALL");
+});
+
+test("AI-13 蒙特卡洛不得因 rollout 截断而弃掉强牌(四条事件回归)", () => {
+  // 病根:Brian 的 rollout 上限 100 步 < 一手实际所需(CALL 之后还要 111 步才结算)
+  // → 未结算的"半局"里已投入筹码还没收回,强牌被算成期望为负 → MC 弃掉四条把自己整死
+  for (const nm of MC_NAMES) {
+    assert.ok(MC_PROFILES[nm].maxSteps >= 400, nm + " 的 rollout 上限必须够打完一手,maxSteps=" + MC_PROFILES[nm].maxSteps);
+  }
+  // 未结算的样本必须被剔除:samples=0 说明这次评估没有任何有效样本
+  const cfg = mergeConfig(makeConfig(), { players: { startPoints: 2000, allowDebt: true }, ante: { amount: 10 } });
+  const st = createGame(cfg, ["Sam", "Baozi", "May", "Yeon"], 4242);
+  advance(st);
+  let guard = 0;
+  while (st.phase === "BETTING" && st.turn.seat === null && guard++ < 10) advance(st);
+  const seat = st.turn.seat;
+  if (seat !== null) {
+    const cands = enumerateActions(st).filter((x) => x.type === "CALL" || x.type === "RAISE");
+    for (const c of cands) {
+      const sim = simulateAction(st, c, seat, makeHeuristic("Sam"), 4, 7, 1);   // 1 步必然打不完
+      assert.equal(sim.samples, 0, "被截断的 rollout 不能计入样本");
+      assert.equal(sim.mean, 0, "没有有效样本时不应给出虚假期望值");
+    }
+  }
 });
