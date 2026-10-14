@@ -27,7 +27,7 @@ export const makeMyBot = (): Policy => (state: GameState, rng) => {
 | 蒙特卡洛 rollout | `src/ai/montecarlo.ts` + `src/env.ts`(确定化 / rollout / 期望比较) |
 | 精确胜率 | `src/ai/equity.ts`(未知牌空间 + 采样摊牌) |
 | 自对弈学习 | `src/ai/learning.ts`(状态抽象 + Q 学习 + `examples/zerob-train.ts`) |
-| 想接 Python / 别的模型 | 欢迎提交 `RemoteAgent`(HTTP 端点收动作,服务端强制视图隔离) |
+| 想接 LLM / Python / 别的模型 | 已内置:见 [docs/llm-entry.md](docs/llm-entry.md),设 3 个环境变量即可上桌 |
 
 ### 公平竞赛(硬性)
 

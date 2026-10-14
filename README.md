@@ -543,6 +543,8 @@ export const makeMyBot = (): Policy => (state: GameState, rng) => {
 
 ## 让 LLM 上场(外部 AI 入口)
 
+> 📖 **只想接入、不想读代码?** 看 [docs/llm-entry.md](docs/llm-entry.md) —— 三步上桌、接口契约、四个已知的坑、成本实测、以及可以让你加一行的**擂台榜**。
+
 任何外部模型都能占一个座位来打 —— 包括 ChatGPT / DeepSeek / 通义,或者本地跑的 Ollama。
 
 **设计要点**:
