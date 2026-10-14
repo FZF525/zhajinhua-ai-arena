@@ -162,7 +162,7 @@ const server = http.createServer(async (req, res) => {
         body.seed === undefined ? undefined : Number(body.seed),
         Array.isArray(body.agents) ? body.agents : undefined,
         (body.numbers && typeof body.numbers === "object" ? body.numbers : {}) as NumberOverrides);
-      return send(res, 200, JSON.stringify({ ok: true, view: viewWithAgents(), agents: agentNames() }));
+      return send(res, 200, JSON.stringify({ ok: true, issues, view: viewWithAgents(), agents: agentNames() }));
     }
     if (path === "/api/state" && req.method === "GET") {
       if (!game) game = newGame(3, "auto");

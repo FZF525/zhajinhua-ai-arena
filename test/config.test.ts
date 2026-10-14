@@ -128,3 +128,22 @@ test("CFG-09 自定义数值校验:拦住\"乱填\"导致的坏局", () => {
   // 默认配置本身无任何问题
   assert.deepEqual(validateNumbers(base, {}), []);
 });
+
+test("CFG-10 欠债模式:允许分值为负,校验不拦'初始积分<底注'", () => {
+  const base = makeBalancedConfig(6);
+  // 非欠债模式:拦
+  const blocked = validateNumbers(base, { ante: 12, startPoints: 1 });
+  assert.ok(blocked.some((i) => i.level === "error" && i.field === "startPoints"));
+  // 欠债模式:只警告,不拦
+  const debt = validateNumbers(base, { ante: 12, startPoints: 1, allowDebt: true });
+  assert.equal(debt.filter((i) => i.level === "error").length, 0, "欠债模式下不该拦");
+  assert.ok(debt.some((i) => i.level === "warn" && i.field === "startPoints"));
+  // 但"开局即达成/即出局"这类仍然要拦
+  assert.ok(validateNumbers(base, { allowDebt: true, startPoints: 20000, winAtOrAbove: 20000 }).some((i) => i.level === "error"));
+  // 应用后配置里 allowDebt 生效
+  const cfg = applyNumberOverrides(base, { allowDebt: true, startPoints: 1, ante: 12 });
+  assert.equal(cfg.players.allowDebt, true);
+  assert.equal(cfg.players.startPoints, 1);
+  assert.equal(cfg.ante.amount, 12);
+  assert.equal(validateConfig(cfg).length, 0, "配置本身仍应合法");
+});

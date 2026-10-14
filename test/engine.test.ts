@@ -1,11 +1,12 @@
 // 引擎端到端用例:换牌 / 截胡链 / 踢牌封锁轮 / 下注 / 比牌平局 / 结算终局 / 不变量与守恒
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeConfig } from "../src/config.ts";
+import { makeConfig, makeBalancedConfig, mergeConfig } from "../src/config.ts";
 import { createGame, aliveSeats, isAlive, player, blockadeRipe, checkInvariants, nextAliveSeat } from "../src/state.ts";
 import type { Action, GameState } from "../src/state.ts";
 import { apply, advance } from "../src/engine.ts";
 import { legalActions } from "../src/validate.ts";
+import { makeAgent } from "../src/ai/index.ts";
 import { createRng } from "../src/rng.ts";
 import { cardsFromIds } from "../src/cards.ts";
 
@@ -515,4 +516,46 @@ test("E2E-22 全员只跟注也会结束:maxRounds(16) 安全阀强制摊牌(防
   assert.equal(st.settlement?.reason, "SHOWDOWN");
   assert.equal(st.multiplier, 1, "没人加注时 M 应保持 1");
   inv(st);
+});
+
+test("E2E-23 欠债模式:分值为负时仍能行动,守恒与不变量都成立;关闭时则跌不到负数", () => {
+  const play = (debt: boolean) => {
+    const cfg = mergeConfig(makeBalancedConfig(3), {
+      players: { startPoints: 200, allowDebt: debt },
+      ante: { amount: 40 },
+      endGame: { bustAtOrBelow: -5000, winAtOrAbove: 100000, maxHands: 4 },
+    });
+    const st = createGame(cfg, ["A", "B", "C"], 5);
+    advance(st);
+    const normal = ["EQB", "ZeroB", "Yeon"].map(makeAgent);
+    const rng = createRng(77);
+    // 开局后底注已进池,所以守恒量 = 玩家积分 + 底池(不能只算积分)
+    const total0 = st.players.reduce((s, p) => s + p.points, 0) + st.pot;
+    let min = Infinity, g = 0;
+    while (!st.gameOver && g++ < 3000) {
+      const seat = st.turn.seat;
+      if (seat === null) break;
+      let a: Action | null = null;
+      if (seat === 0) {
+        // 被迫跟注机器:只要 CALL 合法就跟(饿着也要跟 → 才会欠债)
+        a = legalActions(st, 0).find((x) => x.type === "CALL") ?? null;
+      }
+      if (!a) a = normal[seat](st, rng) as Action;
+      if (!a || !apply(st, a).ok) break;
+      for (const p of st.players) min = Math.min(min, p.points);
+    }
+    return { st, min, total0, inv: checkInvariants(st) };
+  };
+
+  const on = play(true);
+  assert.ok(on.min < 0, "欠债模式下应出现负分,实际最低 " + on.min);
+  assert.deepEqual(on.inv, [], "欠债模式下 INV4 应放宽,其余不变量仍须成立");
+
+  const off = play(false);
+  assert.ok(off.min >= 0, "非欠债模式必须跌不到负数,实际最低 " + off.min);
+  assert.deepEqual(off.inv, []);
+
+  // 守恒:总分(含负数)与开局一致(赢家通吃,积分只在玩家间转移)
+  const sum = on.st.players.reduce((s, p) => s + p.points, 0) + (on.st.pot ?? 0);
+  assert.equal(sum, on.total0, "总分守恒(欠债也不改变总账):" + sum + " vs " + on.total0);
 });

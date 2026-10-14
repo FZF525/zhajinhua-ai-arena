@@ -220,7 +220,7 @@ function render() {
       : p.blind ? '<span class="badge blind">闷牌</span>'
       : '<span class="badge seen">看牌</span>';
     d.innerHTML = '<span class="name">' + esc(p.name) + '</span><span class="badge">座位' + p.seat + '</span>' +
-      '<span class="pts">' + p.points + ' 分</span>' + badge + '<span class="badge">已投 ' + p.committed + '</span>';
+      '<span class="pts">' + pointsText(p.points) + '</span>' + badge + '<span class="badge">已投 ' + p.committed + '</span>';
     const cards = document.createElement("div");
     cards.className = "cards";
     if (p.hand) p.hand.forEach((c) => cards.appendChild(cardEl({ text: c.text }, { small: true })));
@@ -325,7 +325,7 @@ function render() {
         const d = p.handDelta;
         const cls = d > 0 ? "win" : d < 0 ? "lose" : "";
         const cards = p.hand ? "<span class='cards'>" + p.hand.map((c) => c.text).join(" ") + (p.handDesc ? " · " + esc(p.handDesc) : "") + "</span>" : "";
-        return "<div class='row'><span class='nm'>" + esc(p.name) + "</span><span>" + p.points + " 分</span>" +
+        return "<div class='row'><span class='nm'>" + esc(p.name) + "</span><span>" + pointsText(p.points) + "</span>" +
           "<span class='dl " + cls + "'>" + (d > 0 ? "+" + d : String(d)) + "</span>" + cards + "</div>";
       }).join("");
     $("result-note").textContent = "第 " + v.handNo + " 局";
@@ -415,6 +415,11 @@ async function act(action) {
   pumpAI();
 }
 
+/** 积分显示:负分标成"欠债" */
+function pointsText(pts) {
+  return pts < 0 ? '<span style="color:#e2857e">' + pts + " 分 · 欠债</span>" : pts + " 分";
+}
+
 /** 读自定义数值:空 = 用分场预设 */
 function readNumbers() {
   const pick = (id) => { const el = $(id); const t2 = el ? el.value.trim() : ""; return t2 === "" ? undefined : Number(t2); };
@@ -425,12 +430,16 @@ function readNumbers() {
   if (Number.isFinite(win)) out.winAtOrAbove = win;
   if (Number.isFinite(bust)) out.bustAtOrBelow = bust;
   if (Number.isFinite(hands)) out.maxHands = hands;
+  const debt = $("num-debt");
+  if (debt && debt.checked) out.allowDebt = true;
   return out;
 }
 function applyNumbers(n) {
   const set = (id, v2) => { const el = $(id); if (el) el.value = (v2 === undefined || v2 === null) ? "" : String(v2); };
   set("num-ante", n?.ante); set("num-start", n?.startPoints); set("num-win", n?.winAtOrAbove);
   set("num-bust", n?.bustAtOrBelow); set("num-hands", n?.maxHands);
+  const debt = $("num-debt");
+  if (debt) debt.checked = n?.allowDebt === true;
 }
 let numberIssues = [];   // 服务端对自定义数值的校验结果
 /** 底部提示:当前生效数值 + 校验问题 + 阈值差与场次长度的实测经验 */
@@ -446,7 +455,8 @@ function numbersHint(v) {
     return;
   }
   box.style.color = "";
-  box.textContent = "当前生效:底注 " + v.fees.ante + " 分 · 跟注 " + v.fees.seen + "/" + v.fees.blind + " · 胜利阈值 " + v.winAtOrAbove + " · 局数上限 " + (v.maxHands ?? "不限") +
+  box.textContent = (v.allowDebt ? "【欠债模式:分值可为负,由破产阈值决定何时出局】 " : "") +
+    "当前生效:底注 " + v.fees.ante + " 分 · 跟注 " + v.fees.seen + "/" + v.fees.blind + " · 胜利阈值 " + v.winAtOrAbove + " · 局数上限 " + (v.maxHands ?? "不限") +
     "　|　底注是刻度:填了它会把整张费用表等比缩放(跟注/闷注/换牌/踢牌同比例),不破坏玩法平衡。" +
     "　|　实战经验:阈值差和注码刻度一起决定场次长度 —— 6 人自适应分场实测 差 2000≈1 手 / 5000≈2 手 / 10000≈6 手 / 20000≈20 手。";
 }
@@ -492,6 +502,7 @@ $("curtain-btn").onclick = () => {                     // 手动遮屏(单人时
 };
 $("table").onchange = () => markDirty();
 $("seats").onchange = () => markDirty();
+$("num-debt").onchange = () => markDirty();
 for (const id of ["num-ante", "num-start", "num-win", "num-bust", "num-hands"]) {
   const el = $(id);
   if (el) el.oninput = () => markDirty();

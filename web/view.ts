@@ -81,6 +81,7 @@ export function buildView(s: GameState, reveal = true, opts: { god?: boolean; vi
     capReached: s.betting.capReached,
     postCapRounds: s.betting.postCapRoundsPlayed,
     winAtOrAbove: s.config.endGame.winAtOrAbove,
+    allowDebt: s.config.players.allowDebt === true,
     fees: {
       ante: s.config.ante.amount,
       seen: s.config.betting.seenRate,

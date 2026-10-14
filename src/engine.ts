@@ -101,7 +101,7 @@ function startHand(state: GameState): void {
     p.committedThisHand = 0;
     p.pointsAtHandStart = p.points;        // 本局净收支的基准(在扣底注之前)
     p.compareUsedThisTurn = false;
-    p.inHand = p.points >= cfg.ante.amount;
+    p.inHand = cfg.players.allowDebt === true ? true : p.points >= cfg.ante.amount;
   }
 
   const entrants0 = state.players.filter((p) => p.inHand);

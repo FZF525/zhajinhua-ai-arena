@@ -4,7 +4,14 @@ import type { HandCategory } from "./evaluator.ts";
 export interface GameConfig {
   version: string;
   deck: { ranks: number[]; perRankCopies: number; jokers: number };
-  players: { min: number; max: number; handSize: number; startPoints: number };
+  players: {
+    min: number;
+    max: number;
+    handSize: number;
+    startPoints: number;
+    /** 欠债模式:允许把积分打到负数(仍受端局"破产阈值"约束)。默认 false */
+    allowDebt: boolean;
+  };
   pool: { openCards: number };
   ante: { amount: number; scaledByMultiplier: boolean };
   betting: {
@@ -57,7 +64,7 @@ export interface GameConfig {
 export const DEFAULT_CONFIG: GameConfig = {
   version: "1.0.0",
   deck: { ranks: [2,3,4,5,6,7,8,9,10,11,12,13,14], perRankCopies: 8, jokers: 0 },
-  players: { min: 2, max: 6, handSize: 5, startPoints: 20000 },
+  players: { min: 2, max: 6, handSize: 5, startPoints: 20000, allowDebt: false },
   pool: { openCards: 7 },
   ante: { amount: 1, scaledByMultiplier: false },
   betting: {
@@ -185,6 +192,8 @@ export function makeTableConfig(size: TableSize, extra?: unknown): GameConfig {
 export interface NumberOverrides {
   /** 底注 —— 视作"刻度":填了它会把整张费用表等比缩放,保持底注/费率/费用的比例不变 */
   ante?: number;
+  /** 欠债模式:允许分值为负(仍受破产阈值约束) */
+  allowDebt?: boolean;
   /** 以下为绝对值,原样生效 */
   startPoints?: number;
   winAtOrAbove?: number;
@@ -206,7 +215,10 @@ export function applyNumberOverrides(base: GameConfig, ov: NumberOverrides): Gam
   }
   const patch: Record<string, unknown> = {};
   const sp = typeof ov.startPoints === "number" && Number.isFinite(ov.startPoints) ? ov.startPoints : undefined;
-  if (sp !== undefined && sp > 0) patch.players = { startPoints: Math.round(sp) };
+  const ppl: Record<string, unknown> = {};
+  if (sp !== undefined && sp > 0) ppl.startPoints = Math.round(sp);
+  if (ov.allowDebt !== undefined) ppl.allowDebt = ov.allowDebt === true;
+  if (Object.keys(ppl).length) patch.players = ppl;
   const eg: Record<string, unknown> = {};
   if (typeof ov.winAtOrAbove === "number" && Number.isFinite(ov.winAtOrAbove)) eg.winAtOrAbove = Math.round(ov.winAtOrAbove);
   if (typeof ov.bustAtOrBelow === "number" && Number.isFinite(ov.bustAtOrBelow)) eg.bustAtOrBelow = Math.round(ov.bustAtOrBelow);
@@ -231,8 +243,11 @@ export function validateNumbers(base: GameConfig, ov: NumberOverrides): NumberIs
 
   if (typeof ov.ante === "number" && (!Number.isFinite(ov.ante) || ov.ante <= 0)) issues.push({ field: "ante", level: "error", message: "底注必须为正整数" });
   if (typeof ov.startPoints === "number" && ov.startPoints <= 0) issues.push({ field: "startPoints", level: "error", message: "初始积分必须为正" });
-  if (sp < ante) issues.push({ field: "startPoints", level: "error", message: "初始积分(" + sp + ")小于底注(" + ante + "):开局所有人都付不起底注,会立刻全员破产。至少设成 " + ante * 20 + " 以上。" });
-  else if (sp < ante * 20) issues.push({ field: "startPoints", level: "warn", message: "初始积分只有底注的 " + Math.round(sp / ante) + " 倍,开局很容易破产;建议至少 " + ante * 100 + "(=100 倍底注)。" });
+  const allowDebt = ov.allowDebt === true || base.players.allowDebt === true;
+  if (sp < ante) {
+    if (allowDebt) issues.push({ field: "startPoints", level: "warn", message: "欠债模式下初始积分(" + sp + ")低于底注(" + ante + "):开局即负债 —— 这是欠债模式的正常玩法,确认即可。" });
+    else issues.push({ field: "startPoints", level: "error", message: "初始积分(" + sp + ")小于底注(" + ante + "):开局所有人都付不起底注,会立刻全员破产。至少设成 " + ante * 20 + " 以上;或者勾选「允许欠债」。" });
+  } else if (sp < ante * 20) issues.push({ field: "startPoints", level: "warn", message: "初始积分只有底注的 " + Math.round(sp / ante) + " 倍,开局很容易破产;建议至少 " + ante * 100 + "(=100 倍底注)。" });
   if (win <= sp) issues.push({ field: "winAtOrAbove", level: "error", message: "胜利阈值(" + win + ")必须大于初始积分(" + sp + "),否则开局即达成。" });
   else {
     const gap = win - sp;

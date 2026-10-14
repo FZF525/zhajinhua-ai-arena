@@ -271,7 +271,7 @@ export function checkInvariants(state: GameState): string[] {
   const all = [...state.deck, ...state.pool, ...state.kicked, ...state.players.flatMap((p) => p.hand)];
   if (live && all.length !== 104) bad.push("INV3 卡牌总数 " + all.length + " ≠ 104");
   if (new Set(all.map((c) => c.id)).size !== all.length) bad.push("INV7 存在重复卡牌");
-  for (const p of state.players) if (p.points < 0) bad.push("INV4 玩家 " + p.seat + " 积分为负");
+  if (cfg.players.allowDebt !== true) for (const p of state.players) if (p.points < 0) bad.push("INV4 玩家 " + p.seat + " 积分为负");
   if (state.multiplier !== cfg.betting.baseMultiplier && !cfg.betting.ladder.includes(state.multiplier)) {
     bad.push("INV6 非法倍数 " + state.multiplier);
   }

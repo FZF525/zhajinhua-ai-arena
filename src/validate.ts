@@ -2,8 +2,18 @@
 // v1.6:截胡不再是"打断式窗口",而是"下家回合内可执行的选项"(见 engine.setPendingIntercept)
 import { poolMetaFor, player, isAlive, blockadeRipe } from "./state.ts";
 import type { Action, GameState, PlayerState, PendingIntercept } from "./state.ts";
+import type { GameConfig } from "./config.ts";
 import { callCost, compareCost, exchangeCost, interceptCost, kickCost, raiseCost, nextLadderValue } from "./costs.ts";
 import type { CostBreakdown } from "./state.ts";
+
+/**
+ * 能否支付一笔费用。
+ * 欠债模式(players.allowDebt)下允许把积分打到负数 —— 何时出局交给端局"破产阈值"判断,
+ * 而不是"付不起就不许行动"。
+ */
+function canPay(p: { points: number }, total: number, cfg: GameConfig): boolean {
+  return cfg.players.allowDebt === true || p.points >= total;
+}
 
 export interface ValidationResult {
   ok: boolean;
@@ -43,7 +53,7 @@ export function validate(state: GameState, action: Action): ValidationResult {
     }
     case "CALL": {
       const cost = callCost(state, action.seat);
-      return p.points >= cost.total ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
+      return canPay(p, cost.total, state.config) ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
     }
     case "RAISE": {
       const a = action as Action & { type: "RAISE"; toMultiplier: number };
@@ -51,7 +61,7 @@ export function validate(state: GameState, action: Action): ValidationResult {
       if (next === null) return fail("ERR_RAISE_OVER_CAP", "M 已封顶,不能再加注");
       if (a.toMultiplier !== next) return fail("ERR_INVALID_RAISE_STEP", "只能加注到下一档 " + next);
       const cost = raiseCost(state, action.seat, a.toMultiplier);
-      return p.points >= cost.total ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
+      return canPay(p, cost.total, state.config) ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
     }
     case "FOLD": return OK;
     case "COMPARE": return validateCompare(state, action);
@@ -79,7 +89,7 @@ function validateExchange(state: GameState, action: Action): ValidationResult {
   if (!p.hand.some((c) => c.id === a.giveCardId)) return fail("ERR_CARD_NOT_OWNED", "放回的牌必须在自己手上");
   if (a.takeCardId === a.giveCardId) return fail("ERR_CARD_NOT_SELECTABLE", "不能拿同一张牌与自己交换");
   const cost = exchangeCost(state, a.seat);
-  return p.points >= cost.total ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
+  return canPay(p, cost.total, state.config) ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
 }
 
 /** 截胡:只认"最近一次换牌"的那张,且必须由紧邻下家在自己回合内发起 */
@@ -94,7 +104,7 @@ export function interceptEligibility(state: GameState, p: PlayerState, w: Pendin
   if (state.interceptTotalThisHand >= cfg.intercept.maxPerHand) return { ok: false, code: "ERR_HAND_INTERCEPT_LIMIT", message: "本局截胡次数已达上限", cost };
   if (!meta.faceUp) return { ok: false, code: "ERR_CARD_BLOCKADED", message: "封锁轮暗牌不可截", cost };
   if (meta.uninterceptable) return { ok: false, code: "ERR_UNINTERCEPTABLE", message: "该牌不可被截胡", cost };
-  if (p.points < cost.total) return { ok: false, code: "ERR_INSUFFICIENT_POINTS", message: "积分不足:" + cost.note, cost };
+  if (!canPay(p, cost.total, state.config)) return { ok: false, code: "ERR_INSUFFICIENT_POINTS", message: "积分不足:" + cost.note, cost };
   return { ok: true, cost };
 }
 
@@ -121,7 +131,7 @@ function validateKick(state: GameState, action: Action): ValidationResult {
   if (!meta.faceUp) return fail("ERR_CARD_NOT_SELECTABLE", "封锁轮暗牌不能被踢");
   if (cfg.kick.requireNeverSelected && meta.everSelected) return fail("ERR_CARD_ALREADY_SELECTED", "该牌已被选取过,不能踢");
   const cost = kickCost(state);
-  return p.points >= cost.total ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
+  return canPay(p, cost.total, state.config) ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
 }
 
 function validateTakeBlocked(state: GameState, action: Action): ValidationResult {
@@ -133,7 +143,7 @@ function validateTakeBlocked(state: GameState, action: Action): ValidationResult
   if (p.exchangeCount >= state.config.exchange.maxPerHand) return fail("ERR_EXCHANGE_LIMIT", "换牌次数已用完");
   if (!p.hand.some((c) => c.id === a.giveCardId)) return fail("ERR_CARD_NOT_OWNED", "放回的牌必须在自己手上");
   const cost = exchangeCost(state, a.seat);
-  return p.points >= cost.total ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
+  return canPay(p, cost.total, state.config) ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
 }
 
 function validateCompare(state: GameState, action: Action): ValidationResult {
@@ -154,7 +164,7 @@ function validateCompare(state: GameState, action: Action): ValidationResult {
     if (used >= cfg.compare.maxPerHand) return fail("ERR_COMPARE_ALREADY_USED", "本局比牌次数已达上限");
   }
   const cost = compareCost(state, a.seat);
-  return p.points >= cost.total ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
+  return canPay(p, cost.total, state.config) ? { ok: true, cost } : fail("ERR_INSUFFICIENT_POINTS", "积分不足:" + cost.note);
 }
 
 function canCompare(state: GameState, p: PlayerState): boolean {
@@ -166,7 +176,7 @@ function canCompare(state: GameState, p: PlayerState): boolean {
     const used = state.events.filter((e) => e.kind === "COMPARED" && (e.aSeat === p.seat || e.bSeat === p.seat)).length;
     if (used >= cfg.compare.maxPerHand) return false;
   }
-  return p.points >= compareCost(state, p.seat).total;
+  return canPay(p, compareCost(state, p.seat).total, state.config);
 }
 
 /** 当前可用动作(供 UI / CLI 展示) */
@@ -176,21 +186,21 @@ export function legalActions(state: GameState): string[] {
   if (seat === null) return [];
   const p = player(state, seat);
   const out: string[] = ["FOLD"];
-  if (p.points >= callCost(state, seat).total) out.push("CALL");
+  if (canPay(p, callCost(state, seat).total, state.config)) out.push("CALL");
   const next = nextLadderValue(state);
-  if (next !== null && p.points >= raiseCost(state, seat, next).total) out.push("RAISE");
+  if (next !== null && canPay(p, raiseCost(state, seat, next).total, state.config)) out.push("RAISE");
   if (canCompare(state, p)) out.push("COMPARE");
   if (p.blind) out.push("VIEW_HAND");
-  if (!p.blind && p.exchangeCount < state.config.exchange.maxPerHand && p.points >= exchangeCost(state, seat).total) out.push("EXCHANGE");
+  if (!p.blind && p.exchangeCount < state.config.exchange.maxPerHand && canPay(p, exchangeCost(state, seat).total, state.config)) out.push("EXCHANGE");
   const kickable = state.pool.some((c) => {
     const m = state.poolMeta[c.id];
     return m.faceUp && (!state.config.kick.requireNeverSelected || !m.everSelected);
   });
-  if (!p.kickUsed && state.deck.length > 0 && kickable && p.points >= kickCost(state).total) out.push("KICK");
+  if (!p.kickUsed && state.deck.length > 0 && kickable && canPay(p, kickCost(state).total, state.config)) out.push("KICK");
   const blk = activeBlockade(state, seat);
   if (blk && blockadeRipe(state, blk)) {
     out.push("PASS_BLOCKED");
-    if (p.exchangeCount < state.config.exchange.maxPerHand && p.points >= exchangeCost(state, seat).total) out.push("TAKE_BLOCKED");
+    if (p.exchangeCount < state.config.exchange.maxPerHand && canPay(p, exchangeCost(state, seat).total, state.config)) out.push("TAKE_BLOCKED");
   }
   // 待截胡:只在本人的回合内出现(可先 VIEW_HAND 再截)
   const w = state.pendingIntercept;

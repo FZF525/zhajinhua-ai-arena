@@ -41,7 +41,10 @@ function numberOverrides() {
   return ov;
 }
 const withNumbers = <T extends ReturnType<typeof makeTableConfig>>(cfg: T): T =>
-  applyNumberOverrides(cfg, numberOverrides()) as T;
+  applyNumberOverrides(cfg, {
+    ...numberOverrides(),
+    ...(argv.includes("--allow-debt") ? { allowDebt: true } : {}),
+  }) as T;
 if (tableArg !== "auto" && !TABLE_PRESETS[tableArg]) {
   console.error("未知分场: " + tableArg + "(可选 small / big,缺省 auto 按人数自适应)");
   process.exit(1);
@@ -76,7 +79,7 @@ function tableText(st: GameState, viewer: number | null): string {
     const visible = viewer === p.seat || (st.config.fold.revealToAll && p.folded);
     const hand = visible ? handText(p.hand) : p.hand.map(() => "[?]").join(" ");
     const blks = st.blockades.filter((b) => b.kickerSeat === p.seat && !b.resolvedByKicker);
-    rows.push("  " + p.seat + " " + p.name.padEnd(4) + " 积分 " + String(p.points).padStart(6) +
+    rows.push("  " + p.seat + " " + p.name.padEnd(4) + " 积分 " + String(p.points).padStart(6) + (p.points < 0 ? "(欠)" : "     ") +
       " [" + tag + "/" + blind + "]" + (st.turn.seat === p.seat && st.phase === "BETTING" ? " <- 行动中" : "") +
       "  " + hand + (blks.length ? "  暗牌:" + blks.map((b) => b.cardId).join(",") : ""));
   }
