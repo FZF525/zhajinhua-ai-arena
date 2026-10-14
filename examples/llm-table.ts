@@ -23,9 +23,11 @@ const arg = (name: string, dflt: string) => {
   return hit ? hit.split("=").slice(1).join("=") : dflt;
 };
 
-const PROVIDERS: Record<string, { url: string; keyEnv: string; models: string[] }> = {
+interface Provider { url: string; keyEnv: string; models: string[]; jsonMode?: boolean }
+const PROVIDERS: Record<string, Provider> = {
   GLM: { url: "https://open.bigmodel.cn/api/paas/v4/chat/completions", keyEnv: "GLM_API_KEY", models: ["GLM-4.7-Flash", "GLM-4-Flash-25", "glm-4-flash"] },
-  DS: { url: "https://api.deepseek.com/v1/chat/completions", keyEnv: "DS_API_KEY", models: ["deepseek-chat", "deepseek-flash"] },
+  // deepseek-flash 是"推理型":不开 json mode 时容易被推理内容吃掉额度,正文变空
+  DS: { url: "https://api.deepseek.com/v1/chat/completions", keyEnv: "DS_API_KEY", models: ["deepseek-flash", "deepseek-chat"], jsonMode: true },
 };
 
 const SEATS_SPEC = arg("seats", "Brian,Lucas,GLM:0.3,GLM:1.0");
@@ -87,7 +89,7 @@ for (let i = 0; i < SEATS.length; i++) {
   const r = resolved[s.provider];
   remote[i] = {
     stats: newRemoteStats(),
-    cfg: { name: s.label, endpoint: r.url, model: r.model, apiKeyEnv: "unused", apiKey: r.key, temperature: s.temp ?? 0, timeoutMs: 60000, maxTokens: 200, jsonMode: false, fallback: "fold" } as RemoteConfig,
+    cfg: { name: s.label, endpoint: r.url, model: r.model, apiKeyEnv: "unused", apiKey: r.key, temperature: s.temp ?? 0, timeoutMs: 60000, maxTokens: 400, jsonMode: PROVIDERS[s.provider!].jsonMode ?? false, fallback: "fold" } as RemoteConfig,
   };
 }
 const locals: Record<number, ReturnType<typeof makeAgent>> = {};
