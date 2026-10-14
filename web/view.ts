@@ -9,6 +9,7 @@ import { describeEvent } from "../src/format.ts";
 import { cardText as cardTextFn } from "../src/cards.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
 import { describe as describeHand, evaluate } from "../src/evaluator.ts";
+import type { Locale } from "../src/i18n.ts";
 
 /** 当前需要行动的人:永远是轮到的座位(v1.6 起截胡不再打断回合) */
 export function actorOf(s: GameState): number | null {
@@ -70,7 +71,8 @@ export function viewerSeatFor(actor: number | null, humanSeats: number[]): numbe
   return null;
 }
 
-export function buildView(s: GameState, reveal = true, opts: { god?: boolean; viewer?: number | null } = {}) {
+export function buildView(s: GameState, reveal = true, opts: { god?: boolean; viewer?: number | null; locale?: Locale } = {}) {
+  const L: Locale = opts.locale ?? "zh";        // 界面语言:牌型名/日志都按它渲染
   const actor = actorOf(s);
   const over = s.phase === "GAME_OVER";
   const god = !!opts.god;                      // 上帝视角:所有人手牌与暗牌都可见(观战/回放)
@@ -131,7 +133,7 @@ export function buildView(s: GameState, reveal = true, opts: { god?: boolean; vi
         isActor: pl.seat === actor,
         // 弃牌者按配置亮牌;摊牌那一瞬也公开(便于复盘)
         hand: showHand ? pl.hand.map(cardView) : null,
-        handDesc: showHand && pl.hand.length === 5 ? describeHand(evaluate(pl.hand)) : null
+        handDesc: showHand && pl.hand.length === 5 ? describeHand(evaluate(pl.hand), L) : null
       };
     }),
     pool: s.pool.map((c) => {
@@ -166,7 +168,7 @@ export function buildView(s: GameState, reveal = true, opts: { god?: boolean; vi
       reason: interceptEligibility(s, s.players[s.pendingIntercept.candidateSeat], s.pendingIntercept).code ?? null
     } : null,
     ties: s.compareTies,
-    log: s.events.slice(-16).map((e) => describeEvent(e, { hideCardIds: hiddenForViewer(s, viewerSeat) })),
+    log: s.events.slice(-16).map((e) => describeEvent(e, { hideCardIds: hiddenForViewer(s, viewerSeat), locale: L })),
     settlement: settled ? {
       reason: settled.reason,
       pot: settled.pot,

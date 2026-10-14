@@ -33,6 +33,10 @@ export const TIER: Record<HandCategory, number> = {
   HIGH_CARD: 1
 };
 
+import { t } from "./i18n.ts";
+import type { Locale } from "./i18n.ts";
+
+/** 中文牌型名(保留:老代码与测试在用) */
 export const CATEGORY_LABEL: Record<HandCategory, string> = {
   STRAIGHT_FLUSH: "同花顺",
   FIVE_OF_A_KIND: "五条",
@@ -130,11 +134,16 @@ export function compare(a: HandValue, b: HandValue): number {
   return 0;
 }
 
-export function describe(v: HandValue): string {
-  const label = CATEGORY_LABEL[v.category];
+/** 牌型名(按语言) */
+export function categoryLabel(c: HandCategory, locale: Locale = "zh"): string {
+  return t(locale, "tier." + c);
+}
+
+export function describe(v: HandValue, locale: Locale = "zh"): string {
+  const label = categoryLabel(v.category, locale);
   const key = v.key.map((r) => (r === undefined ? "" : rankText(r))).filter(Boolean).join(" ");
-  const royal = v.isRoyalFlush ? "(皇家)" : "";
-  return label + royal + " [" + key + "]";
+  const royal = v.isRoyalFlush ? t(locale, "hand.royal") : "";
+  return t(locale, "hand.desc", { cat: label + royal, key });
 }
 
 function rankText(r: number): string {

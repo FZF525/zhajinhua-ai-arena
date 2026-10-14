@@ -92,6 +92,15 @@ export function cardsFromIds(ids: string[]): Card[] {
   return ids.map(cardById);
 }
 
+/** 花色名(按语言) */
+export function suitName(suitId: string, locale: Locale = "zh"): string {
+  return t(locale, "suit." + suitId);
+}
+/** 色系名(按语言)。注意:英文不能用 "black" —— 那是「黑桃」的意思,色系要用 Coal/Blood/Frost/Solar */
+export function familyName(family: string, locale: Locale = "zh"): string {
+  return t(locale, "family." + family);
+}
+
 export function cardText(c: Card): string {
   const s = SUIT_BY_ID[c.suit];
   return s.symbol + rankLabel(c.rank);

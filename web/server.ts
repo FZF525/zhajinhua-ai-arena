@@ -14,6 +14,8 @@ import { legalActions } from "../src/validate.ts";
 import { callCost, compareCost, exchangeCost, interceptCost, kickCost, raiseCost, nextLadderValue } from "../src/costs.ts";
 import { cardText } from "../src/cards.ts";
 import { describeEvent } from "../src/format.ts";
+import { resolveLocale } from "../src/i18n.ts";
+import type { Locale } from "../src/i18n.ts";
 import { makeAgent, isAgentName, AI_NAMES, AGENTS } from "../src/ai/index.ts";
 import type { Policy } from "../src/env.ts";
 import { createRng } from "../src/rng.ts";
@@ -111,7 +113,7 @@ function viewWithAgents(reveal = true, god = false) {
   // 视角只能落在人类座位上:单人局锁死自己;热座只跟随"轮到的那个人类";轮到 AI 时旁观
   // (旧写法在热座下把视角交给当前行动者 → AI 踢出的暗牌会被玩家看到)
   const viewer = viewerSeatFor(actor, humans);
-  const v = buildView(game, reveal, { god, viewer }) as ReturnType<typeof buildView> & { actorIsAI: boolean; seatIsAI: boolean[]; humanSeats: number[] };
+  const v = buildView(game, reveal, { god, viewer, locale: localeOf(req, url) }) as ReturnType<typeof buildView> & { actorIsAI: boolean; seatIsAI: boolean[]; humanSeats: number[] };
   v.seatIsAI = agents.map((a) => !!a);
   v.actorIsAI = actor !== null && !!agents[actor];
   v.humanSeats = agents.map((a, i) => (a ? -1 : i)).filter((i) => i >= 0);
@@ -135,7 +137,15 @@ function stepOnce(): { ok: boolean; reason?: string; acted?: number; events?: st
   record(recorder!, a);
   if (!PAUSE_BETWEEN_HANDS && game.phase === "HAND_START" && !game.gameOver) { advance(game); recordAdvance(recorder!); }
   maybeAutoSave();
-  return { ok: true, acted: actor, events: game.events.slice(before).map(describeEvent) };
+  return { ok: true, acted: actor, events: game.events.slice(before).map((e) => describeEvent(e, { locale: localeOf(req, url) })) };
+}
+
+/** 界面语言:?lang=en 优先,其次 Accept-Language,默认中文 */
+function localeOf(req: { headers: Record<string, string | string[] | undefined> }, url: URL): Locale {
+  const q = url.searchParams.get("lang");
+  if (q) return resolveLocale(q);
+  const h = req.headers["accept-language"];
+  return resolveLocale(Array.isArray(h) ? h[0] : h);
 }
 
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
@@ -191,7 +201,7 @@ const server = http.createServer(async (req, res) => {
       record(recorder!, action);                             // 人类动作也要进录制
       if (!PAUSE_BETWEEN_HANDS && game.phase === "HAND_START" && !game.gameOver) { advance(game); recordAdvance(recorder!); }
       maybeAutoSave();
-      const events = game.events.slice(before).map(describeEvent);
+      const events = game.events.slice(before).map((e) => describeEvent(e, { locale: localeOf(req, url) }));
       return send(res, 200, JSON.stringify({ ok: true, events, view: viewWithAgents() }));
     }
     if (path === "/api/health") return send(res, 200, JSON.stringify({ ok: true, players: game ? game.players.length : 0 }));
