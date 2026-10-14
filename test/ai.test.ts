@@ -8,6 +8,7 @@ import { makeAgent, AI_NAMES, AGENTS, PROFILES, MC_PROFILES } from "../src/ai/in
 import { determinize, enumerateActions, simulateAction, exchangeGain } from "../src/env.ts";
 import { createRng } from "../src/rng.ts";
 import { mcDecide } from "../src/ai/montecarlo.ts";
+import { handReward } from "../src/ai/learning.ts";
 import { cardsFromIds } from "../src/cards.ts";
 import { legalActions } from "../src/validate.ts";
 
@@ -184,4 +185,30 @@ test("AI-10 负债不该只会弃牌:欠债模式下按名义筹码评估,非欠
   assert.equal(aOff.type, "FOLD", "非欠债模式下付不起就只能弃牌,实际 " + aOff.type);
   assert.equal(legalActions(off).includes("CALL"), false, "非欠债模式下不该提供 CALL");
   assert.equal(legalActions(on).includes("CALL"), true, "欠债模式下应提供 CALL");
+});
+
+test("AI-11 复合回报:名次项零和、取胜项给赢家、净收益项被裁剪", () => {
+  const cfg = makeConfig({ players: { startPoints: 20000 }, ante: { amount: 10 }, endGame: { maxHands: 1, winAtOrAbove: 1e9, bustAtOrBelow: -1e9 } });
+  const st = createGame(cfg, ["A", "B", "C"], 5);
+  advance(st);
+  // 手工构造一手结果:座位1 赢最多,座位2 中,座位0 亏最多
+  st.players.forEach((p) => (p.pointsAtHandStart = 1000));
+  st.players[0].points = 900; st.players[1].points = 1300; st.players[2].points = 1000;
+  (st as unknown as { settlement: { winners: number[] } }).settlement = { winners: [1] };
+
+  const w = { rank: 0.5, win: 0.4, points: 0.1 };
+  const r = handReward(st, w);
+  assert.equal(r.length, 3);
+  // 名次项零和:三个人名次得分 1 / 0 / -1
+  const rankOnly = handReward(st, { rank: 1, win: 0, points: 0 });
+  assert.ok(Math.abs(rankOnly.reduce((a, b) => a + b, 0)) < 1e-9, "名次项应零和");
+  assert.ok(rankOnly[1] > rankOnly[2] && rankOnly[2] > rankOnly[0], "谁赢得多名次得分越高");
+  // 取胜项只给赢家
+  const winOnly = handReward(st, { rank: 0, win: 1, points: 0 });
+  assert.deepEqual(winOnly, [0, 1, 0]);
+  // 净收益项被裁剪到 ±1 以内
+  const pointOnly = handReward(st, { rank: 0, win: 0, points: 1 });
+  assert.ok(pointOnly.every((x) => Math.abs(x) <= 1), "净收益项应裁剪");
+  // 组合:赢家 > 中位 > 亏家
+  assert.ok(r[1] > r[2] && r[2] > r[0], "复合回报应保持顺序:" + JSON.stringify(r));
 });

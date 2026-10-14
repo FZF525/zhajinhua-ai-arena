@@ -116,6 +116,36 @@ export function zeroBDecide(s: GameState, rng: Rng, table: ZeroBTable, eps = 0, 
   return legal[bestAction(qs, legal)].action;
 }
 
+/** 复合回报权重:名次 / 取胜 / 净收益 */
+export interface RewardWeights {
+  rank: number;
+  win: number;
+  points: number;
+}
+
+/**
+ * 一手牌里每位玩家的复合回报。
+ *  - rank:按**本手净收益**排名(并列取平均名次),归一化到 [-1, +1](第 1 名 +1,最后 -1)
+ *  - win :是否吃到底池(0/1)
+ *  - points:本手净收益(以 4×底注归一化,裁剪到 [-1, +1])
+ * 默认(不传 reward)时退化为纯净收益 —— 老行为,保证可复现。
+ */
+export function handReward(state: GameState, w: RewardWeights): number[] {
+  const n = state.players.length;
+  const unit = Math.max(1, state.config.ante.amount * 4);
+  const deltas = state.players.map((p) => p.points - (p.pointsAtHandStart ?? p.points));
+  const winners = new Set(state.settlement?.winners ?? []);
+  return state.players.map((p, i) => {
+    const better = deltas.filter((x) => x > deltas[i]).length;
+    const equal = deltas.filter((x) => x === deltas[i]).length;
+    const rank = better + (equal + 1) / 2;                                  // 1 起算的平均名次
+    const rankScore = n > 1 ? (n - 1 - 2 * (rank - 1)) / (n - 1) : 0;       // 第 1 名 +1,最后 -1
+    const winScore = winners.has(i) ? 1 : 0;
+    const pointScore = Math.max(-1, Math.min(1, deltas[i] / unit));
+    return w.rank * rankScore + w.win * winScore + w.points * pointScore;
+  });
+}
+
 export interface TrainOptions {
   hands: number;
   seed?: number;
@@ -130,6 +160,8 @@ export interface TrainOptions {
   table?: ZeroBTable;
   /** 状态抽象选项(equitySamples > 0 即启用精确胜率特征) */
   keyOpts?: ZeroBKeyOptions;
+  /** 复合回报权重;不传 = 旧的纯净收益 */
+  reward?: RewardWeights;
 }
 
 /**
@@ -176,7 +208,7 @@ export function trainZeroB(opts: TrainOptions): ZeroBTable {
     if (st.phase !== "HAND_START") break;      // 意外状态:结束训练
     // 回报 = 本局净收益(以底注为单位做归一化)
     const unit = Math.max(1, st.config.ante.amount * 4);
-    const rewards = st.players.map((p) => (p.points - p.pointsAtHandStart) / unit);
+    const rewards = opts.reward ? handReward(st, opts.reward) : st.players.map((p) => (p.points - (p.pointsAtHandStart ?? p.points)) / unit);
     for (let seat = 0; seat < n; seat++) {
       const tr = trail[seat];
       for (let t = 0; t < tr.length; t++) {
