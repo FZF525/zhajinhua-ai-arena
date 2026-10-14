@@ -49,6 +49,15 @@
 <div id="ailine" class="ailine"></div>
 
 <div id="seats" class="seats"></div>
+<div id="advanced" class="advanced">
+  <span class="ctl">底注 <input id="num-ante" type="number" min="1" step="1" placeholder="分场预设" title="留空 = 用分场预设"></span>
+  <span class="ctl">初始积分 <input id="num-start" type="number" min="100" step="100" placeholder="预设"></span>
+  <span class="ctl">胜利阈值 <input id="num-win" type="number" step="100" placeholder="预设"></span>
+  <span class="ctl">破产阈值 <input id="num-bust" type="number" step="100" placeholder="预制 0"></span>
+  <span class="ctl">局数上限 <input id="num-hands" type="number" min="1" step="1" placeholder="预设"></span>
+  <span class="dim">留空即用分场预设;填了就按你填的算(数值原样生效,不随分场缩放)</span>
+</div>
+<div id="thresh-hint" class="settingline"></div>
 <div id="settingline" class="settingline"></div>
 <div id="replaybar" class="replaybar hidden">
   <select id="rpl-list" title="历史对局"></select>

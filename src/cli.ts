@@ -5,7 +5,7 @@
 //   node src/cli.ts --selftest --games=100
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { makeTableConfig, makeBalancedConfig, TABLE_PRESETS } from "./config.ts";
+import { makeTableConfig, makeBalancedConfig, mergeConfig, TABLE_PRESETS } from "./config.ts";
 import type { TableSize } from "./config.ts";
 import { createGame, aliveSeats, isAlive, player, checkInvariants, blockadeRipe } from "./state.ts";
 import type { Action, GameState } from "./state.ts";
@@ -28,6 +28,25 @@ const flag = (name: string, def: number): number => {
 };
 const has = (name: string): boolean => argv.includes("--" + name);
 const tableArg = (argv.find((a) => a.startsWith("--table="))?.split("=")[1] ?? "auto") as TableSize | "auto";
+
+/** 命令行自定义数值(--ante / --start / --win / --bust / --max-hands):在分场预设之上原样覆盖 */
+function numberOverrides(): Record<string, unknown> {
+  const hasFlag = (n: string) => argv.some((a) => a.startsWith("--" + n + "="));
+  const patch: Record<string, unknown> = {};
+  const ante = flag("ante", 0), start = flag("start", 0), win = flag("win", 0), hands = flag("max-hands", 0);
+  if (hasFlag("ante") && ante > 0) patch.ante = { amount: Math.round(ante) };
+  if (hasFlag("start") && start > 0) patch.players = { startPoints: Math.round(start) };
+  const eg: Record<string, unknown> = {};
+  if (hasFlag("win")) eg.winAtOrAbove = Math.round(win);
+  if (hasFlag("bust")) eg.bustAtOrBelow = Math.round(flag("bust", 0));
+  if (hasFlag("max-hands") && hands > 0) eg.maxHands = Math.round(hands);
+  if (Object.keys(eg).length) patch.endGame = eg;
+  return patch;
+}
+const withNumbers = <T>(cfg: T): T => {
+  const p = numberOverrides();
+  return Object.keys(p).length ? (mergeConfig(cfg, p) as T) : cfg;
+};
 if (tableArg !== "auto" && !TABLE_PRESETS[tableArg]) {
   console.error("未知分场: " + tableArg + "(可选 small / big,缺省 auto 按人数自适应)");
   process.exit(1);
@@ -87,7 +106,7 @@ function selftest(games: number, maxSteps: number): void {
   for (let g = 0; g < games; g++) {
     const n = 2 + (g % 5);
     const names = Array.from({ length: n }, (_, i) => "P" + (i + 1));
-    const st = createGame(tableConfig(n, { players: { min: 2, max: 6, handSize: 5, startPoints: 20000 } }), names, g + 1);
+    const st = createGame(withNumbers(tableConfig(n, { players: { min: 2, max: 6, handSize: 5, startPoints: 20000 } })), names, g + 1);
     const total0 = st.players.reduce((a, p) => a + p.points, 0);
     advance(st);
     const rng = createRng((g + 1) * 104729);
@@ -130,7 +149,7 @@ function selftest(games: number, maxSteps: number): void {
 function demo(seed: number): void {
   const n = Math.max(2, Math.min(6, flag("players", 3)));
   const names = Array.from({ length: n }, (_, i) => String.fromCharCode(65 + i));
-  const st = createGame(tableConfig(n), names, seed);
+  const st = createGame(withNumbers(tableConfig(n)), names, seed);
   const rng = createRng(seed * 31 + 7);
   advance(st);
   console.log("=== 演示对局 seed=" + seed + "  分场=" + tableLabel(n) + "  人数=" + n + "  底注=" + st.config.ante.amount + " ===");
@@ -158,7 +177,7 @@ async function interactive(): Promise<void> {
   const count = Math.max(2, Math.min(6, Number(countRaw.trim() || 3)));
   const names = Array.from({ length: count }, (_, i) => "玩家" + (i + 1));
   const seed = Math.floor(Math.random() * 1e9);
-  const st = createGame(tableConfig(count), names, seed);
+  const st = createGame(withNumbers(tableConfig(count)), names, seed);
   advance(st);
   console.log("\n种子: " + seed + " (记录它可完整复现本局)\n");
   console.log("命令: v=看牌 c=跟注 r=加注 f=弃牌 b<座位>=比牌 e<拿><给>=换牌 k<序号>=踢牌 t<给>=换走暗牌 p=不换 i<给>=截胡 d=放弃截胡 rt<拿>=补换 s=放弃补换 q=退出\n");

@@ -116,7 +116,7 @@ function selectedAgents() {
   return [...$("seats").querySelectorAll("select")].map((s) => (s.value === "human" ? null : s.value));
 }
 
-const EXPECT_SERVER = "1.8.2";   // 与服务端 src/version.ts 对齐
+const EXPECT_SERVER = "1.10.0";   // 与服务端 src/version.ts 对齐
 
 const suitClass = (t) => {
   if (!t) return "";
@@ -298,6 +298,20 @@ function render() {
   v.log.slice().reverse().forEach((t) => { const li = document.createElement("li"); li.textContent = t; log.appendChild(li); });
   for (const t of aiLog.slice().reverse()) { const li = document.createElement("li"); li.textContent = "AI · " + t; li.style.color = "#caa24a"; log.prepend(li); }
 
+  numbersHint(v);
+  // 设置回显(纯文本,不会因为控件渲染问题而看不见)
+  const echo = $("settingline");
+  if (echo) {
+    const seatTxt = [...$("seats").querySelectorAll("select")].map((s2, i2) => i2 + "=" + (s2.value === "human" ? "人类" : s2.value)).join(" ");
+    const tsel = $("table");
+    const tableTxt = tsel && tsel.selectedOptions && tsel.selectedOptions[0] ? tsel.selectedOptions[0].textContent : "?";
+    const nums = readNumbers();
+    const numTxt = Object.keys(nums).length ? " · 自定义 " + JSON.stringify(nums) : "";
+    echo.textContent = (v.god ? "【上帝视角已开:所有人手牌可见】 " : "") +
+      "当前设置:人数 " + playerCount() + " · 分场 " + tableTxt + numTxt + " · 座位 " + seatTxt +
+      (settingsKey() !== currentSettings ? "  ← 已改动,点「按上面设置新开一场」生效" : "");
+  }
+
   // 本局结算:一眼看清谁赢了多少、用什么牌赢的
   const s = v.settlement;
   $("result-panel").hidden = !s;
@@ -401,18 +415,43 @@ async function act(action) {
   pumpAI();
 }
 
+/** 读自定义数值:空 = 用分场预设 */
+function readNumbers() {
+  const pick = (id) => { const el = $(id); const t2 = el ? el.value.trim() : ""; return t2 === "" ? undefined : Number(t2); };
+  const out = {};
+  const ante = pick("num-ante"), start = pick("num-start"), win = pick("num-win"), bust = pick("num-bust"), hands = pick("num-hands");
+  if (Number.isFinite(ante)) out.ante = ante;
+  if (Number.isFinite(start)) out.startPoints = start;
+  if (Number.isFinite(win)) out.winAtOrAbove = win;
+  if (Number.isFinite(bust)) out.bustAtOrBelow = bust;
+  if (Number.isFinite(hands)) out.maxHands = hands;
+  return out;
+}
+function applyNumbers(n) {
+  const set = (id, v2) => { const el = $(id); if (el) el.value = (v2 === undefined || v2 === null) ? "" : String(v2); };
+  set("num-ante", n?.ante); set("num-start", n?.startPoints); set("num-win", n?.winAtOrAbove);
+  set("num-bust", n?.bustAtOrBelow); set("num-hands", n?.maxHands);
+}
+/** 底部提示:当前生效数值 + 阈值差与场次长度的实测经验 */
+function numbersHint(v) {
+  const box = $("thresh-hint");
+  if (!box || !v) return;
+  box.textContent = "当前生效:底注 " + v.fees.ante + " 分 · 胜利阈值 " + v.winAtOrAbove + " · 局数上限 " + (v.maxHands ?? "不限") +
+    "　|　实战经验:阈值差(阈值 − 初始积分)决定一场多长 —— 6 人局实测 差 1000≈15 手,2000≈50 手,5000≈230 手;差太小秒结束,差太大打不完。";
+}
+
 const LS_KEY = "zjh.settings.v1";
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; }
 }
 function saveSettings() {
-  try { localStorage.setItem(LS_KEY, JSON.stringify({ players: playerCount(), table: $("table").value, agents: selectedAgents() })); } catch { /* 隐私模式 */ }
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ players: playerCount(), table: $("table").value, agents: selectedAgents(), numbers: readNumbers() })); } catch { /* 隐私模式 */ }
 }
 let currentSettings = "";
 function settingsKey() { return playerCount() + "|" + $("table").value + "|" + selectedAgents().join(","); }
 
 async function newGame() {
-  const req = { players: playerCount(), table: $("table").value, agents: selectedAgents() };
+  const req = { players: playerCount(), table: $("table").value, agents: selectedAgents(), numbers: readNumbers() };
   const r = await api("/api/new", req);
   if (r.ok) {
     view = r.view; pending = null; sel = { take: null }; lastActor = null; aiLog = [];
@@ -431,6 +470,10 @@ $("curtain-btn").onclick = () => {                     // 手动遮屏(单人时
 };
 $("table").onchange = () => markDirty();
 $("seats").onchange = () => markDirty();
+for (const id of ["num-ante", "num-start", "num-win", "num-bust", "num-hands"]) {
+  const el = $(id);
+  if (el) el.oninput = () => markDirty();
+}
 $("new").onclick = () => { stopAI(); newGame(); };
 $("speed").onchange = () => { aiDelay = Number($("speed").value) || 0; };
 $("reset").onclick = () => {
@@ -447,6 +490,7 @@ function markDirty() { render(); }
     renderPlayerButtons();
     setPlayerCount(s.players === undefined || s.players === null ? 3 : s.players, true);
     setSelectValue("table", s.table, "auto");
+    applyNumbers(s.numbers);
     renderSeats(Array.isArray(s.agents) ? s.agents : undefined);
     loadAgentList().then(() => renderSeats(Array.isArray(loadSettings().agents) ? loadSettings().agents : undefined));
     newGame();
