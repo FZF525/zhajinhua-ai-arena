@@ -16,7 +16,11 @@ import type { GameConfig } from "../config.ts";
  * 非欠债模式下就是真实积分,风险比例控制照旧。
  */
 export function effectivePoints(points: number, cfg: GameConfig): number {
-  return cfg.players.allowDebt === true ? Math.max(points, cfg.players.startPoints) : points;
+  if (cfg.players.allowDebt !== true) return points;
+  // 名义筹码:取"初始积分"和"20 倍底注"里更大的那个。
+  // 只看初始积分不够 —— 用户可能把它设成 1(欠债玩法),那等于告诉 AI"你只有 1 分",又会退化成全员弃牌。
+  const nominal = Math.max(cfg.players.startPoints, cfg.ante.amount * 20);
+  return Math.max(points, nominal);
 }
 
 export interface Profile {

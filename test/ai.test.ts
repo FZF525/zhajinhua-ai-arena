@@ -12,6 +12,27 @@ import { handReward } from "../src/ai/learning.ts";
 import { cardsFromIds } from "../src/cards.ts";
 import { legalActions } from "../src/validate.ts";
 
+/** 安全换手牌:把原手牌还回牌堆,再从牌堆里取指定牌 —— 不会产生重复卡牌 */
+function setHand(st: GameState, seat: number, ids: string[]): void {
+  const me = st.players[seat];
+  st.deck.push(...me.hand);
+  const picked = [];
+  for (const id of ids) {
+    const i = st.deck.findIndex((c) => c.id === id);
+    if (i < 0) throw new Error("牌堆里没有 " + id);
+    picked.push(st.deck.splice(i, 1)[0]);
+  }
+  me.hand = picked;
+}
+
+/** 造一手"三条"(从牌堆里取,保证合法) */
+function makeTriple(st: GameState, seat: number): void {
+  const rank = st.deck[0].rank;
+  const same = st.deck.filter((c) => c.rank === rank).slice(0, 3).map((c) => c.id);
+  const others = st.deck.filter((c) => c.rank !== rank).slice(0, 2).map((c) => c.id);
+  setHand(st, seat, [...same, ...others]);
+}
+
 function fresh(names: string[], seed = 7, patch?: unknown) {
   const st = createGame(makeConfig({ players: { startPoints: 20000 }, endGame: { maxHands: 4, winAtOrAbove: 1e9, bustAtOrBelow: -1, winTakesPriorityOverBust: true }, ...(patch as object ?? {}) }), names, seed);
   advance(st);
@@ -172,7 +193,7 @@ test("AI-10 负债不该只会弃牌:欠债模式下按名义筹码评估,非欠
     const seat = st.turn.seat!;
     const me = st.players[seat];
     me.blind = false;
-    me.hand = cardsFromIds(["HEART-7", "SPADE-7", "CLUB-7", "MOON-2", "STAR-9"]);   // 三条:强牌
+    makeTriple(st, seat);                                                            // 三条:强牌(从牌堆取,避免重复卡牌)
     me.points = -50;                                                                 // 深度负债
     return st;
   };
@@ -211,4 +232,30 @@ test("AI-11 复合回报:名次项零和、取胜项给赢家、净收益项被�
   assert.ok(pointOnly.every((x) => Math.abs(x) <= 1), "净收益项应裁剪");
   // 组合:赢家 > 中位 > 亏家
   assert.ok(r[1] > r[2] && r[2] > r[0], "复合回报应保持顺序:" + JSON.stringify(r));
+});
+
+test("AI-12 欠债模式下'初始积分=1'也不能让 AI 变被动(名义筹码含 20 倍底注兜底)", () => {
+  const mk = (allowDebt: boolean, startPoints: number) => {
+    const cfg = mergeConfig(makeBalancedConfig(3), {
+      players: { startPoints, allowDebt },
+      ante: { amount: 5 },
+      endGame: { bustAtOrBelow: -1e9, winAtOrAbove: 1e9, maxHands: 20 },
+    });
+    const st = createGame(cfg, ["A", "B", "C"], 6);
+    advance(st);
+    const seat = st.turn.seat!;
+    const me = st.players[seat];
+    me.blind = false;
+    makeTriple(st, seat);                                                          // 三条(从牌堆取)
+    me.points = -300;                                                              // 深度负债
+    return st;
+  };
+  // 名义筹码 = max(初始积分 1, 20 × 底注 5) = 100 → 拿着三条不该弃牌
+  const on = mk(true, 1);        // 欠债模式 + 初始积分 1
+  const aOn = makeAgent("Sam")(on, createRng(3))!;
+  assert.notEqual(aOn.type, "FOLD", "初始积分=1 也不该让 AI 拿着三条弃牌,实际 " + aOn.type);
+  // 非欠债模式:初始积分给足(否则开局就全员破产),再把玩家打到付不起 → 只能弃
+  const off = mk(false, 200);
+  off.players[off.turn.seat!].points = -300;
+  assert.equal(legalActions(off).includes("CALL"), false, "非欠债模式下付不起就不该有 CALL");
 });
