@@ -147,3 +147,17 @@ test("CFG-10 欠债模式:允许分值为负,校验不拦'初始积分<底注'",
   assert.equal(cfg.ante.amount, 12);
   assert.equal(validateConfig(cfg).length, 0, "配置本身仍应合法");
 });
+
+test("CFG-11 欠债预警按'胜负差'判定(不是底注) —— 大额长局不该被误报", () => {
+  const base = makeBalancedConfig(6);
+  // 用户的配置:初始 1000 / 胜利 250000 / 破产 -150000 / 底注 9 → 胜负差 249000,-150000 不算无底洞 → 不该警告
+  const userCfg = validateNumbers(base, { ante: 9, startPoints: 1000, winAtOrAbove: 250000, bustAtOrBelow: -150000, allowDebt: true, compareMinRound: 2, blindTargetProtectRounds: 1 });
+  assert.equal(userCfg.filter((i) => i.field === "bustAtOrBelow").length, 0, "不该误报,实际:" + JSON.stringify(userCfg.filter((i) => i.field === "bustAtOrBelow")));
+
+  // 真正的无底洞:胜负差小、破产阈值极深 → 才警告
+  const hole = validateNumbers(base, { startPoints: 20000, winAtOrAbove: 40000, bustAtOrBelow: -100000, allowDebt: true });
+  assert.ok(hole.some((i) => i.field === "bustAtOrBelow" && i.level === "warn"), "无底洞应当警告");
+  // 警告文案要短(一句话以内,不写小作文)
+  const msg = hole.find((i) => i.field === "bustAtOrBelow")!.message;
+  assert.ok(msg.length < 90, "警告应简短,实际 " + msg.length + " 字:" + msg);
+});
