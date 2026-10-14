@@ -65,3 +65,17 @@ test("HTML-08 回放工具条不能被轮询自动隐藏(用户点「回放」�
   const lines = js.split("\n").filter((l) => l.includes('classList.toggle("hidden", !('));
   assert.ok(lines.some((l) => l.includes("replayBarOpen")), "工具条可见性必须考虑 replayBarOpen,实际:" + lines.join(" | "));
 });
+
+test("HTML-09 卡片文本不许换行(emoji 花色比文本符号宽一倍,\"符号+10\"曾在卡里断成两行)", () => {
+  const link = readFileSync(new URL("../web/public/style.css", import.meta.url), "utf8");
+  const all = link.split("\n");
+  const i0 = all.findIndex((l) => l.startsWith(".card{"));
+  const cardRule = all.slice(i0, all.findIndex((l, i) => i >= i0 && l.includes("}")) + 1).join(" ");
+  assert.ok(cardRule.includes("white-space:nowrap"), ".card 必须 nowrap,实际:" + cardRule.slice(0, 100));
+  assert.ok(/width:(6[0-9]|7[0-9])px/.test(cardRule), ".card 宽度应 >= 60px,实际:" + (cardRule.match(/width:\d+px/) ?? [""])[0]);
+  const cards = readFileSync(new URL("../src/cards.ts", import.meta.url), "utf8");
+  for (const name of ["SNOW", "DROPLET", "STAR", "MOON"]) {
+    const line = cards.split("\n").find((l) => l.includes('id: "' + name + '"')) ?? "";
+    assert.ok(line.includes("\\uFE0E"), name + " 必须带文本呈现变体符 U+FE0E,实际:" + line.slice(0, 90));
+  }
+});

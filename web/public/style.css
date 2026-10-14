@@ -22,14 +22,15 @@ main{display:grid;grid-template-columns:1fr 340px;gap:14px;padding:14px;align-it
 .panel-title{font-weight:700;margin-bottom:8px;color:var(--gold)}
 .dim{color:var(--dim);font-weight:400;font-size:12px}
 .pool{display:flex;gap:8px;flex-wrap:wrap}
-.card{width:58px;height:78px;border-radius:8px;background:#fffdf6;color:#111;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;font-size:20px;font-weight:700;border:2px solid #d9d2bd;user-select:none}
+.card{width:62px;height:80px;border-radius:8px;background:#fffdf6;color:#111;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-size:18px;font-weight:700;border:2px solid #d9d2bd;user-select:none;
+  white-space:nowrap;line-height:1.1;letter-spacing:-.3px}
 .card .sub{font-size:10px;color:#7a7566;font-weight:400}
 .card.red{color:#d21f1f}.card.black{color:#111}.card.blue{color:#0b62d0}.card.gold{color:#b8790a}
 .card.back{background:repeating-linear-gradient(45deg,#123a25,#123a25 6px,#0f3120 6px,#0f3120 12px);color:#7fbf9b;border-color:#2b7a4e}
 .card.clickable{cursor:pointer;box-shadow:0 0 0 2px rgba(255,207,107,.35)}
 .card.clickable:hover{transform:translateY(-3px);box-shadow:0 0 0 3px var(--gold)}
-.card.small{width:42px;height:58px;font-size:16px}
+.card.small{width:47px;height:58px;font-size:15px;white-space:nowrap}
 .players{display:grid;gap:8px}
 .pl{display:flex;align-items:center;gap:10px;background:#0f3624;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .pl.actor{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
@@ -40,7 +41,7 @@ main{display:grid;grid-template-columns:1fr 340px;gap:14px;padding:14px;align-it
 .badge.blind{color:var(--warn);border-color:var(--warn)}
 .badge.seen{color:var(--blue);border-color:var(--blue)}
 .badge.fold{color:var(--red);border-color:var(--red)}
-.pl .cards{display:flex;gap:4px;margin-left:auto}
+.pl .cards{display:flex;gap:4px;margin-left:auto;white-space:nowrap}
 .hand{display:flex;gap:8px;flex-wrap:wrap;min-height:82px}
 .ops{display:flex;gap:8px;flex-wrap:wrap}
 .hint{color:var(--dim);font-size:12px;margin-top:8px;min-height:18px}
@@ -82,7 +83,7 @@ select{flex:0 0 auto;min-width:120px}
 #result .row .dl{min-width:70px;text-align:right;font-variant-numeric:tabular-nums}
 #result .row .dl.win{color:#7ee2a8}
 #result .row .dl.lose{color:#e2857e}
-#result .cards{color:var(--dim)}
+#result .cards{color:var(--dim);white-space:nowrap}
 .advanced{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:8px 14px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
 .advanced input{width:92px;padding:4px 8px;background:#123a25;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:inherit}
 /* 欠债模式:这一步会把你打成负数 */
