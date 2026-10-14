@@ -186,3 +186,22 @@ test("WEB-11 本局结算后把手牌全部摊开(便于复盘)", () => {
   for (const p of v.players) assert.ok(typeof p.handDelta === "number", "应有本局净收支");
   assert.equal(v.players.reduce((a, p) => a + p.handDelta, 0), 0, "净收支合计为 0");
 });
+
+test("WEB-12 日志不得泄露暗牌:踢牌补入的暗牌对别人必须脱敏", () => {
+  const st = fresh();
+  const kicker = actorOf(st)!;
+  apply(st, { type: "KICK", seat: kicker, targetCardId: st.pool.find((c) => st.poolMeta[c.id].faceUp)!.id });
+  const drawn = st.events.filter((e) => e.kind === "KICKED").at(-1) as { drawnId: string };
+  assert.ok(drawn?.drawnId, "踢牌应补入一张暗牌");
+
+  // 踢牌者自己看得到
+  const mine = buildView(st, true, { viewer: kicker });
+  assert.equal(mine.log.some((l: string) => l.includes(drawn.drawnId)), true, "踢牌者应能在日志里看到自己的暗牌");
+
+  // 别人看不到(日志里应是 [暗牌])——踢牌后行动权仍在踢牌者手里,所以这里显式换一个座位做视角
+  const others = (kicker + 1) % 3;
+  assert.notEqual(others, kicker);
+  const otherView = buildView(st, true, { viewer: others });
+  assert.equal(otherView.log.some((l: string) => l.includes(drawn.drawnId)), false, "别人不该在日志里看到暗牌 id");
+  assert.equal(otherView.log.some((l: string) => l.includes("踢掉") && l.includes("[暗牌]")), true, "应脱敏成 [暗牌]");
+});

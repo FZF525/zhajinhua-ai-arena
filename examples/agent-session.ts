@@ -12,6 +12,7 @@ import { enumerateActions } from "../src/env.ts";
 import { makeAgent } from "../src/ai/index.ts";
 import { callCost, compareCost, exchangeCost, kickCost, raiseCost } from "../src/costs.ts";
 import { describeEvent } from "../src/format.ts";
+import { hiddenForViewer } from "../web/view.ts";
 import { buildPrompt } from "../src/ai/remote.ts";
 import type { Action, GameState } from "../src/state.ts";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -43,7 +44,7 @@ function rebuild(s: Session): { st: GameState; events: string[] } {
     const before = st.events.length;
     const r = apply(st, a, { dealNextHand: false });
     if (!r.ok) throw new Error("重放失败: " + JSON.stringify(a) + " " + r.error!.code);
-    for (const e of st.events.slice(before)) ev.push(describeEvent(e));
+    for (const e of st.events.slice(before)) ev.push(describeEvent(e, { hideCardIds: hiddenForViewer(st, MY) }));
     if (st.phase === "HAND_START" && !st.gameOver) advance(st);
   }
   return { st, events: ev };
@@ -65,7 +66,7 @@ function aiPlayUntilMyTurn(s: Session, st: GameState, ev: string[]): void {
     const r = apply(st, a, { dealNextHand: false });
     if (!r.ok) break;
     s.actions.push(a);
-    for (const e of st.events.slice(before)) ev.push(describeEvent(e));
+    for (const e of st.events.slice(before)) ev.push(describeEvent(e, { hideCardIds: hiddenForViewer(st, MY) }));
     if (st.phase === "HAND_START" && !st.gameOver) advance(st);
   }
 }
@@ -139,7 +140,7 @@ if (has("new")) {
     const before = st.events.length;
     const r = apply(st, hit, { dealNextHand: false });
     if (!r.ok) { console.log("!! 被拒: " + r.error!.code); process.exit(1); }
-    for (const e of st.events.slice(before)) events.push(describeEvent(e));
+    for (const e of st.events.slice(before)) events.push(describeEvent(e, { hideCardIds: hiddenForViewer(st, MY) }));
     s.actions.push(hit);
     console.log("✓ 我执行了:" + JSON.stringify(hit) + "  →  " + st.events.slice(before).map(describeEvent).join(" | "));
     if (st.phase === "HAND_START" && !st.gameOver) advance(st);

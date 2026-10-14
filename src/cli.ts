@@ -10,6 +10,7 @@ import type { TableSize } from "./config.ts";
 import { createGame, aliveSeats, isAlive, player, checkInvariants, blockadeRipe } from "./state.ts";
 import type { Action, GameState } from "./state.ts";
 import { apply, advance } from "./engine.ts";
+import { hiddenForViewer } from "../web/view.ts";
 import { legalActions } from "./validate.ts";
 import { createRng } from "./rng.ts";
 import { cardText, handText } from "./cards.ts";
@@ -175,7 +176,7 @@ async function interactive(): Promise<void> {
       if (a) {
         const r = apply(st, a);
         console.log(">> " + player(st, actor).name + "(AI) 出招: " + a.type);
-        if (r.ok) for (const e of r.events) console.log("  · " + describeEvent(e));
+        if (r.ok) for (const e of r.events) console.log("  · " + describeEvent(e, { hideCardIds: hiddenForViewer(st, actor) }));
       }
       continue;
     }
@@ -201,7 +202,7 @@ async function interactive(): Promise<void> {
     } catch (err) { console.log("输入无法解析: " + (err as Error).message); continue; }
     const r = apply(st, action);
     if (!r.ok) { console.log("x 非法动作: " + r.error!.code + " " + r.error!.message); continue; }
-    for (const e of r.events) console.log("  . " + describeEvent(e));
+    for (const e of r.events) console.log("  . " + describeEvent(e, { hideCardIds: hiddenForViewer(st, actor) }));
   }
 
   console.log("\n=== 整场结束 ===");

@@ -6,6 +6,7 @@ import { callCost, compareCost, exchangeCost, interceptCost, kickCost, raiseCost
 import { cardText } from "../src/cards.ts";
 import type { Card } from "../src/cards.ts";
 import { describeEvent } from "../src/format.ts";
+import { cardText as cardTextFn } from "../src/cards.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
 import { describe as describeHand, evaluate } from "../src/evaluator.ts";
 
@@ -15,6 +16,27 @@ export function actorOf(s: GameState): number | null {
 }
 
 /** 下发牌时同时给 id 与显示文本:前端只能拿 id 去发动作,避免自造假 id */
+/**
+ * 该查看者"看不到的牌"集合:别人的手牌 + 牌堆 + 别人踢出的暗牌。
+ * 日志里的暗牌 id 必须按这个集合脱敏 —— 否则 UI 上牌背朝下、日志里却把牌面写明了(真发生过)。
+ */
+export function hiddenForViewer(s: GameState, viewerSeat: number | null): Set<string> {
+  const hidden = new Set<string>();
+  for (const p of s.players) {
+    if (p.seat === viewerSeat) continue;
+    if (s.config.fold.revealToAll && p.folded) continue;   // 弃牌者按规则亮牌,属公开信息
+    for (const c of p.hand) hidden.add(c.id);
+  }
+  for (const c of s.deck) hidden.add(c.id);
+  for (const c of s.pool) {
+    const m = s.poolMeta[c.id];
+    const blocker = s.blockades.find((b) => b.cardId === c.id && !b.resolvedByKicker);
+    const mine = blocker && blocker.kickerSeat === viewerSeat;
+    if (!m.faceUp && !mine) hidden.add(c.id);
+  }
+  return hidden;
+}
+
 function cardView(c: Card): { id: string; text: string } {
   return { id: c.id, text: cardText(c) };
 }
@@ -128,7 +150,7 @@ export function buildView(s: GameState, reveal = true, opts: { god?: boolean; vi
       reason: interceptEligibility(s, s.players[s.pendingIntercept.candidateSeat], s.pendingIntercept).code ?? null
     } : null,
     ties: s.compareTies,
-    log: s.events.slice(-16).map(describeEvent),
+    log: s.events.slice(-16).map((e) => describeEvent(e, { hideCardIds: hiddenForViewer(s, viewerSeat) })),
     settlement: settled ? {
       reason: settled.reason,
       pot: settled.pot,
