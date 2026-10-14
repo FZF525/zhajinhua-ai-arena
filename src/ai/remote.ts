@@ -57,6 +57,8 @@ export interface RemoteStats {
   /** token 用量(便于盯成本) */
   inputTokens: number;
   outputTokens: number;
+  /** 被兜底拦下的"闷牌弃牌"次数(此值高说明模型没听 prompt) */
+  blindFoldGuards?: number;
 }
 
 export function newRemoteStats(): RemoteStats {
@@ -92,11 +94,13 @@ export function buildPrompt(state: GameState, seat: number, legal: Action[]): st
   });
   lines.push("规则提示:比牌(COMPARE)付 2×费率×M 点名单挑,输者出局;踢牌(KICK)把一张明牌踢掉并补一张暗牌给自己,费用 8×M;换牌(EXCHANGE)付 1×M 换池中一张明牌。");
   lines.push("决策要点:");
-  lines.push("  1) 如果你还闷牌,先用 VIEW_HAND 看自己的牌(免费;代价是之后跟注从半价变全价)—— 不知道牌力就是在赌博;");
-  lines.push("  2) 看完牌再判断:牌力弱(高牌/一对且对手很强)而跟注成本超过底池的 1/3,就 FOLD;");
+  lines.push("  1) 【硬规则】还在闷牌时**禁止 FOLD**:你根本没看过自己的牌,不可能知道牌力弱。要么先 VIEW_HAND(免费)看牌,要么 CALL(闷牌只付半价)。");
+  lines.push("  2) 【硬规则】只有**已经看过牌**、且牌力属于「高牌 / 一对」、且跟注成本超过底池 1/3 时,才允许 FOLD;两对及以上不要弃;");
   lines.push("  3) 牌力强(顺子及以上)可以 RAISE 施压,或在底池已有分量时用 COMPARE 直接结算;");
   lines.push("  4) 对手多(3 家以上)时,烂牌一路跟注到底是最亏的打法;");
   lines.push("  5) 换牌(EXCHANGE)只要 1×M,能明显提升牌力就值得。");
+  lines.push("  6) 每局至少要看过一次牌再决定;整场很少看牌只说明你在盲赌,不是在打牌;");
+  lines.push("  7) 反例(真实事故):某模型连续 6 次决策全部 FOLD,理由写「我的牌力不强」,而它全程都是闷牌、一次没看过牌 —— 这是编造理由,不是判断。");
   lines.push('回一个 JSON,先写一句理由再给动作,例如:{"reason":"我还没看牌,先看牌","action":"VIEW_HAND"}。');
   lines.push('action 必须是上面列表里的类型,参数必须用上面列表里的 id。');
   return lines.join("\n");
@@ -288,6 +292,15 @@ export async function remoteDecide(cfg: RemoteConfig, state: GameState, seat: nu
     s.violations++;
     s.byViolation[violation ?? "unknown"] = (s.byViolation[violation ?? "unknown"] ?? 0) + 1;
     if (violation === "timeout") s.timeouts++;
+  }
+  // ③ 硬兜底:闷牌时禁止弃牌 —— prompt 说过它也可能不听(实测有模型连续 6 次"没看牌就弃"),
+  //    这里直接把 FOLD 换成免费的 VIEW_HAND(依然算一次决策,单独计数以便观察)
+  if (action.type === "FOLD" && player(state, seat).blind) {
+    const peek = legal.find((a) => a.type === "VIEW_HAND");
+    if (peek) {
+      action = peek;
+      s.blindFoldGuards = (s.blindFoldGuards ?? 0) + 1;
+    }
   }
   s.decisions++;
   const ms = Date.now() - t0;

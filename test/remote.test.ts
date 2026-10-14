@@ -80,14 +80,15 @@ test("RM-03 合法性:参数不对不放过;唯一候选时可救;未知类型�
   }
 });
 
-test("RM-04 违规兜底:LLM 返回非法动作 → 记违规并弃牌,比赛继续", async () => {
+test("RM-04 违规兜底:LLM 返回非法动作 → 记违规并兜底(闷牌时兜底=免费看牌),比赛继续", async () => {
   const st = fresh();
   const seat = st.turn.seat!;
   const stats = newRemoteStats();
   const s = stub('{"action":"ALLIN"}');            // 引擎里没有这个动作,救不回来
   const { action, info } = await remoteDecide(cfgWith(s.impl), st, seat, stats);
   assert.equal(info.violation, "illegal");
-  assert.equal(action.type, "FOLD");
+  // 兜底动作:闷牌时被硬兜底换成免费看牌(见 RM-12),看过牌才是弃牌
+  assert.equal(action.type, player(st, seat).blind ? "VIEW_HAND" : "FOLD", "闷牌时的兜底不能是弃牌");
   assert.equal(stats.violations, 1);
   assert.equal(stats.byViolation.illegal, 1);
   assert.equal(apply(st, action).ok, true, "兜底动作必须合法");
@@ -172,7 +173,8 @@ test("RM-08 思考型模型:正文为空时报 empty(带 finish_reason),只有�
   const r1 = await remoteDecide(cfgWith(emptyImpl), st, seat, newRemoteStats());
   assert.equal(r1.info.violation, "empty");
   assert.equal(r1.info.finishReason, "length");
-  assert.equal(r1.action.type, "FOLD", "兜底仍是合法动作");
+  assert.equal(r1.action.type, player(st, seat).blind ? "VIEW_HAND" : "FOLD", "兜底仍是合法动作(闷牌时优先免费看牌)");
+  assert.equal(apply(st, r1.action).ok, true, "兜底动作必须合法");
 
   // (b) 正文为空但推理里有动作 → 抽出来用
   const reasoningImpl = (async () => new Response(JSON.stringify({ choices: [{ message: { content: "", reasoning_content: '先看牌。{\\"action\\":\\"VIEW_HAND\\"}' } }] }), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
@@ -233,4 +235,30 @@ test("RM-11 json-mode:开启后请求体要带 response_format=json_object(专�
   }) as unknown as typeof fetch;
   await remoteDecide(cfgWith(spy2), st, seat, newRemoteStats());
   assert.equal(body.response_format, undefined, "没开启时不应带上");
+});
+
+test("RM-12 闷牌时返回 FOLD 必须被兜底换成免费看牌(prompt 说不动也要硬拦)", async () => {
+  const st = fresh();
+  const seat = st.turn.seat!;
+  assert.ok(player(st, seat).blind, "前提:该座位此刻是闷牌");
+  assert.ok(enumerateActions(st).some((a) => a.type === "VIEW_HAND"), "前提:免费看牌可选");
+
+  // 真实事故复现:模型不看牌就弃,还编理由
+  const { impl } = stub('{"reason":"我的牌力不强,跟注成本过高","action":"FOLD"}');
+  const stats = newRemoteStats();
+  const r = await remoteDecide(cfgWith(impl), st, seat, stats);
+  assert.equal(r.action.type, "VIEW_HAND", "闷牌弃牌必须被兜底成 VIEW_HAND");
+  assert.equal(stats.blindFoldGuards, 1, "应记录一次兜底");
+  assert.equal(stats.violations, 0, "兜底不是违规");
+
+  // 对照:看过牌之后的 FOLD 不受影响(别把正常弃牌也拦住)
+  const st2 = fresh();
+  const actor2 = st2.turn.seat!;
+  player(st2, actor2).blind = false;                 // 确定性地造"已看过牌"
+  if (enumerateActions(st2).some((a) => a.type === "FOLD")) {
+    const s2 = newRemoteStats();
+    const r2 = await remoteDecide(cfgWith(impl), st2, actor2, s2);
+    assert.equal(r2.action.type, "FOLD", "看过牌后弃牌不应被拦");
+    assert.ok(!s2.blindFoldGuards, "不该触发兜底(可选字段未触发时是 undefined)");
+  }
 });
