@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { makeConfig } from "../src/config.ts";
 import { createGame, player } from "../src/state.ts";
 import { apply, advance } from "../src/engine.ts";
-import { actorOf, buildView } from "../web/view.ts";
+import { viewerSeatFor, actorOf, buildView } from "../web/view.ts";
 
 function fresh(patch?: unknown) {
   const st = createGame(makeConfig(patch ?? {}), ["A", "B", "C"], 3);
@@ -204,4 +204,29 @@ test("WEB-12 日志不得泄露暗牌:踢牌补入的暗牌对别人必须脱敏
   const otherView = buildView(st, true, { viewer: others });
   assert.equal(otherView.log.some((l: string) => l.includes(drawn.drawnId)), false, "别人不该在日志里看到暗牌 id");
   assert.equal(otherView.log.some((l: string) => l.includes("踢掉") && l.includes("[暗牌]")), true, "应脱敏成 [暗牌]");
+});
+
+test("WEB-13 视角只能落在人类座位:轮到 AI 时不能把 AI 的私密视角给玩家", () => {
+  assert.equal(viewerSeatFor(0, [0]), 0, "单人局锁在自己那座");
+  assert.equal(viewerSeatFor(1, [0]), 0, "单人局:轮到 AI 也还是看自己");
+  assert.equal(viewerSeatFor(1, [0, 2]), null, "热座:轮到 AI → 旁观(null),绝不跟随 AI");
+  assert.equal(viewerSeatFor(2, [0, 2]), 2, "热座:轮到人类 → 跟随那个人");
+  assert.equal(viewerSeatFor(null, [0, 2]), null, "没有行动者 → 旁观");
+  assert.equal(viewerSeatFor(3, []), null, "全 AI → 旁观");
+});
+
+test("WEB-14 AI 踢牌后的暗牌:非踢牌者视角必须看不到牌 id", () => {
+  const st = fresh();
+  const kicker = actorOf(st)!;
+  apply(st, { type: "KICK", seat: kicker, targetCardId: st.pool.find((c) => st.poolMeta[c.id].faceUp)!.id });
+  const drawn = st.events.filter((e) => e.kind === "KICKED").at(-1) as { drawnId: string };
+  assert.ok(drawn?.drawnId);
+
+  const spectator = buildView(st, true, { viewer: null }) as { pool: Array<{ id: string | null }>; log: string[] };
+  assert.equal(spectator.pool.some((c) => c.id === drawn.drawnId), false, "旁观视角不该看到踢出的暗牌 id");
+  assert.equal(spectator.pool.some((c) => c.id === null), true, "应有一张暗牌以 null 下发");
+  assert.equal(spectator.log.some((l: string) => l.includes(drawn.drawnId)), false, "日志也不能有");
+
+  const mine = buildView(st, true, { viewer: kicker }) as { pool: Array<{ id: string | null }> };
+  assert.equal(mine.pool.some((c) => c.id === drawn.drawnId), true, "踢牌者自己应能看到(规则如此)");
 });

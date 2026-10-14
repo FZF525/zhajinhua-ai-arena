@@ -21,7 +21,7 @@ import { createRecorder, record, replayTo } from "../src/replay.ts";
 import type { Recording } from "../src/replay.ts";
 import { saveReplay, listReplays, loadReplay, deleteReplay, replaysDir, pruneReplays } from "../src/store.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
-import { actorOf, buildView } from "./view.ts";
+import { actorOf, buildView, viewerSeatFor } from "./view.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(HERE, "public");
@@ -104,8 +104,9 @@ function newGame(players: number, table: string, seed?: number, agentSpec?: Arra
 function viewWithAgents(reveal = true, god = false) {
   const actor = actorOf(game);
   const humans = agents.map((a, i) => (a ? -1 : i)).filter((i) => i >= 0);
-  // 单人局:视角锁死在自己那一座(否则轮到哪个 AI 就会看到它的牌);多人同屏才跟随行动者
-  const viewer = humans.length === 1 ? humans[0] : actor;
+  // 视角只能落在人类座位上:单人局锁死自己;热座只跟随"轮到的那个人类";轮到 AI 时旁观
+  // (旧写法在热座下把视角交给当前行动者 → AI 踢出的暗牌会被玩家看到)
+  const viewer = viewerSeatFor(actor, humans);
   const v = buildView(game, reveal, { god, viewer }) as ReturnType<typeof buildView> & { actorIsAI: boolean; seatIsAI: boolean[]; humanSeats: number[] };
   v.seatIsAI = agents.map((a) => !!a);
   v.actorIsAI = actor !== null && !!agents[actor];

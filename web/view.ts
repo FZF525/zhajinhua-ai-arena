@@ -56,6 +56,20 @@ function costOf(s: GameState, seat: number, name: string): number | null {
 }
 
 /** 按可见性裁剪:别人的手牌不下发;闷牌者自己的手牌也不下发;公共池暗牌只对踢牌者可见 */
+/**
+ * 该用哪个座位当"我的视角"。
+ * 铁律:**视角只能落在人类座位上** —— 否则轮到 AI 行动时,它的手牌和它踢出的暗牌就会显示给人看
+ * (真出过:热座状态下一轮到 AI 踢牌,玩家就看到了暗牌)。
+ *  - 单人局:锁死在那位人类(这样轮到 AI 也能看自己的手牌,也不泄露 AI 的)
+ *  - 热座(≥2 人类):轮到谁且**谁是人类**才跟随;轮到 AI 时不给任何私密视角(null = 旁观)
+ *  - 全 AI:null(旁观)
+ */
+export function viewerSeatFor(actor: number | null, humanSeats: number[]): number | null {
+  if (humanSeats.length === 1) return humanSeats[0];
+  if (actor !== null && humanSeats.includes(actor)) return actor;
+  return null;
+}
+
 export function buildView(s: GameState, reveal = true, opts: { god?: boolean; viewer?: number | null } = {}) {
   const actor = actorOf(s);
   const over = s.phase === "GAME_OVER";
@@ -123,7 +137,8 @@ export function buildView(s: GameState, reveal = true, opts: { god?: boolean; vi
     pool: s.pool.map((c) => {
       const m = s.poolMeta[c.id];
       const blocker = s.blockades.find((b) => b.cardId === c.id && !b.resolvedByKicker);
-      const mine = blocker && blocker.kickerSeat === actor;
+      // 用 viewerSeat 而不是 actor:否则"轮到踢牌的 AI"时,任何人都会看到那张暗牌(真出过这个 bug)
+      const mine = blocker && blocker.kickerSeat === viewerSeat;
       return {
         id: m.faceUp || mine || over || god ? c.id : null,
         text: m.faceUp || mine || over || god ? cardText(c) : null,
@@ -137,7 +152,7 @@ export function buildView(s: GameState, reveal = true, opts: { god?: boolean; vi
       };
     }),
     blockades: s.blockades.filter((b) => !b.resolvedByKicker).map((b) => ({
-      kickerSeat: b.kickerSeat, cardId: b.kickerSeat === actor || s.poolMeta[b.cardId]?.faceUp ? b.cardId : null, ripe: blockadeRipe(s, b)
+      kickerSeat: b.kickerSeat, cardId: b.kickerSeat === viewerSeat || s.poolMeta[b.cardId]?.faceUp ? b.cardId : null, ripe: blockadeRipe(s, b)
     })),
     // 待截胡:换牌后挂起,到下家的回合内才可执行(§7.4 v1.6)
     intercept: s.pendingIntercept ? {
@@ -145,7 +160,7 @@ export function buildView(s: GameState, reveal = true, opts: { god?: boolean; vi
       candidateSeat: s.pendingIntercept.candidateSeat,
       fromSeat: s.pendingIntercept.fromSeat,
       n: s.pendingIntercept.n,
-      forMe: s.pendingIntercept.candidateSeat === actor,
+      forMe: s.pendingIntercept.candidateSeat === viewerSeat,
       cost: interceptEligibility(s, s.players[s.pendingIntercept.candidateSeat], s.pendingIntercept).cost.total,
       canNow: interceptEligibility(s, s.players[s.pendingIntercept.candidateSeat], s.pendingIntercept).ok,
       reason: interceptEligibility(s, s.players[s.pendingIntercept.candidateSeat], s.pendingIntercept).code ?? null
