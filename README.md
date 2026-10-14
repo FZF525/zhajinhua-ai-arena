@@ -3,17 +3,18 @@
 
 纯积分制娱乐游戏引擎(104 张牌 / 8 花色 / 4 色系),TypeScript + Node.js,**零第三方依赖**;核心引擎与 UI 分离,费用 / 上限 / 阈值 / 牌型排序全部可配置,并附带一个现成的 **AI 擂台**。
 
+> **English?** A self-contained English overview is at **[docs/README.en.md](docs/README.en.md)**(project summary, quick start, measured findings).
+
 [![CI](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-124%20passed-brightgreen)
 ![node](https://img.shields.io/badge/node-%E2%89%A522.18-blue)
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-
 ### 本文导航
 
-| 上手 | 规则与配置 | 实测与结论 | 扩展 |
+| 上手 | 规则与配置 | 实测与结论 | 扩展与文档 |
 | --- | --- | --- | --- |
-| [三种用法](#三种用法) · [Web UI](#-web-ui热座零依赖无构建) | [规则摘要](#规则摘要) · [自定义数值](#自定义数值底注--初始积分--阈值--局数上限) · [分场档位](#分场档位小分场--大分场--自适应) | [平衡性提示](#平衡性提示实测数据) · [6 人桌联赛](#6-人桌联赛实测2026-10) · [ZeroB 训练实验](#zerob-训练实验加量--换兜底--复合回报均无显著收益) · [比牌平衡](#比牌平衡早期狙击问题与实测修法) · [隐私模型](#隐私模型两条铁律--回归用例) | [造一个新的 AI](#造一个新的-ai以及把-sam-改强) · [让 LLM 上场](#让-llm-上场外部-ai-入口) · [AI 擂台](#ai-擂台循环赛--分组赛--6-人桌联赛) · [外部接入指南](docs/llm-entry.md) |
+| [三种用法](#三种用法) · [Web UI](#-web-ui热座零依赖无构建) · [环境要求](#环境要求) | [规则摘要](#规则摘要) · [自定义数值](#自定义数值底注--初始积分--阈值--局数上限) · [配置](#配置) · [分场档位](#分场档位小分场--大分场--自适应) | [平衡性提示](#平衡性提示实测数据) · [6 人桌联赛](#6-人桌联赛实测2026-10) · [ZeroB 训练实验](#zerob-训练实验加量--换兜底--复合回报均无显著收益) · [比牌平衡](#比牌平衡早期狙击问题与实测修法) · [隐私模型](#隐私模型两条铁律--回归用例) | [造一个新的 AI](#造一个新的-ai以及把-sam-改强) · [让 LLM 上场](#让-llm-上场外部-ai-入口) · [AI 擂台](#ai-擂台循环赛--分组赛--6-人桌联赛) · [LLM 接入指南](docs/llm-entry.md) · [工程陷阱记录](docs/lessons.md) · [**English overview**](docs/README.en.md) |
 
 ### 一眼看完 / At a glance
 
