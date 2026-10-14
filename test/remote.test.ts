@@ -6,7 +6,7 @@ import { createGame, checkInvariants, player } from "../src/state.ts";
 import { apply, advance } from "../src/engine.ts";
 import { createRng } from "../src/rng.ts";
 import { enumerateActions } from "../src/env.ts";
-import { buildPrompt, parseAction, matchLegal, remoteDecide, newRemoteStats } from "../src/ai/remote.ts";
+import { buildPrompt, parseAction, matchLegal, repairParams, remoteDecide, newRemoteStats } from "../src/ai/remote.ts";
 import type { RemoteConfig } from "../src/ai/remote.ts";
 
 function fresh(names = ["A", "B", "C"], seed = 5) {
@@ -76,7 +76,7 @@ test("RM-03 合法性:参数不对不放过;唯一候选时可救;未知类型�
     const all = legal.filter((a) => a.type === "EXCHANGE");
     const got = matchLegal(wrong, legal);
     if (all.length === 1) assert.deepEqual(got, all[0], "唯一候选应救回");
-    else assert.equal(got, null, "多候选时不能瞎猜");
+    else assert.equal(got, null, "matchLegal 本身仍不瞎猜(修补是下一步 repairParams 的事)");
   }
 });
 
@@ -260,5 +260,31 @@ test("RM-12 闷牌时返回 FOLD 必须被兜底换成免费看牌(prompt 说不
     const r2 = await remoteDecide(cfgWith(impl), st2, actor2, s2);
     assert.equal(r2.action.type, "FOLD", "看过牌后弃牌不应被拦");
     assert.ok(!s2.blindFoldGuards, "不该触发兜底(可选字段未触发时是 undefined)");
+  }
+});
+
+test("RM-13 类型对、参数抄错 → 修补成最优变体,而不是兜底弃牌", async () => {
+  const st = fresh();
+  const seat = st.turn.seat!;
+  const view = enumerateActions(st).find((a) => a.type === "VIEW_HAND")!;
+  apply(st, view);                                   // 先看牌,让换牌可选
+  const legal = enumerateActions(st);
+  const exs = legal.filter((a) => a.type === "EXCHANGE");
+  if (!exs.length) return;                           // 该局面没有换牌可选就跳过
+
+  // 模型想换牌,但 id 全是错的
+  const stats = newRemoteStats();
+  const { impl } = stub('{"reason":"我要换掉最没用的那张,搏一张好牌","action":"EXCHANGE","takeCardId":"NOT-A-CARD","giveCardId":"NOPE"}');
+  const actor = st.turn.seat!;
+  const r = await remoteDecide(cfgWith(impl), st, actor, stats);
+  assert.equal(r.action.type, "EXCHANGE", "应该修补成换牌,而不是弃牌");
+  assert.ok(exs.some((a) => JSON.stringify(a) === JSON.stringify(r.action)), "修补出来的必须是引擎给的合法换牌");
+  assert.equal(stats.paramRepairs, 1, "应计入 paramRepairs");
+  assert.equal(stats.violations, 0, "修补不算违规");
+
+  // 单元:repairParams 挑的是收益最大的那组
+  if (exs.length > 1) {
+    const best = repairParams(st, st.turn.seat!, "EXCHANGE", legal)!;
+    assert.equal(best.type, "EXCHANGE");
   }
 });

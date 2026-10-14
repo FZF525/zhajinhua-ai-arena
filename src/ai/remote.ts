@@ -8,7 +8,7 @@
 //     比赛结果里会打印违规次数,不做"悄悄帮它圆过去"。
 import type { Action, GameState } from "../state.ts";
 import type { Policy } from "../env.ts";
-import { enumerateActions } from "../env.ts";
+import { enumerateActions, exchangeGain } from "../env.ts";
 import { player } from "../state.ts";
 import { buildView } from "../../web/view.ts";
 import { callCost, compareCost, exchangeCost, interceptCost, kickCost, raiseCost } from "../costs.ts";
@@ -59,6 +59,8 @@ export interface RemoteStats {
   outputTokens: number;
   /** 被兜底拦下的"闷牌弃牌"次数(此值高说明模型没听 prompt) */
   blindFoldGuards?: number;
+  /** 类型对但参数抄错、被修补成最优变体的次数(不等于违规) */
+  paramRepairs?: number;
 }
 
 export function newRemoteStats(): RemoteStats {
@@ -180,6 +182,46 @@ export function matchLegal(candidate: Action | null, legal: Action[]): Action | 
   return sameType.length === 1 ? sameType[0] : null;
 }
 
+/**
+ * 参数写错/缺失时的"最优变体"修补。
+ * 只对**意图明确、差别仅在挑哪张牌**的动作生效(换牌 / 踢牌):
+ * 按引擎自己的收益助手挑最优,而不是直接兜底成弃牌。
+ * 真实事故:模型回 "EXCHANGE" 且理由写明要换哪张,但 id 抄错 → 判违规 → 兜底弃牌,
+ * 结果"想换牌的人被判了弃牌"。多候选时不能瞎猜(RM-03),但也不能一律放弃。
+ */
+export function repairParams(state: GameState, seat: number, type: string, legal: Action[]): Action | null {
+  const cands = legal.filter((a) => a.type === type);
+  if (!cands.length) return null;
+  if (cands.length === 1) return cands[0];
+  const p = player(state, seat);
+  if (type === "EXCHANGE") {
+    let best: Action | null = null;
+    let bestGain = -Infinity;
+    for (const a of cands) {
+      const takeId = (a as unknown as { takeCardId?: string }).takeCardId;
+      const take = state.pool.find((c) => c.id === takeId);
+      const gain = exchangeGain(state, p, take);
+      if (gain > bestGain) { bestGain = gain; best = a; }
+    }
+    return best;
+  }
+  if (type === "KICK") {
+    // 踢牌去掉一张自己的牌、补一张暗牌:踢"最不参与组合"的那张(对子/三条里的牌不能踢)
+    const count = new Map<string, number>();
+    for (const c of p.hand) count.set(c.label, (count.get(c.label) ?? 0) + 1);
+    let best: Action | null = null;
+    let bestKeep = -Infinity;
+    for (const a of cands) {
+      const id = (a as unknown as { targetCardId?: string }).targetCardId;
+      const card = p.hand.find((c) => c.id === id);
+      const keep = card ? (count.get(card.label) ?? 1) * 100 + (card.rankNum ?? 0) : -1;
+      if (keep > bestKeep) { bestKeep = keep; best = a; }
+    }
+    return best;
+  }
+  return cands[0];
+}
+
 /** 构造一个"外部 AI 玩家" */
 export function makeRemoteAgent(cfg: RemoteConfig): Policy {
   const fetchImpl = cfg.fetchImpl ?? fetch;
@@ -284,8 +326,15 @@ export async function remoteDecide(cfg: RemoteConfig, state: GameState, seat: nu
   }
   let parsed = violation ? null : parseAction(raw);
   let matched = violation ? null : matchLegal(parsed, legal);
+  // 类型认出来了、只是参数抄错 → 修补成该类型里最优的合法变体(不算违规,单独计数)
+  let repaired = false;
+  if (!violation && !matched && parsed?.type) {
+    const fix = repairParams(state, seat, parsed.type, legal);
+    if (fix) { matched = fix; repaired = true; s.paramRepairs = (s.paramRepairs ?? 0) + 1; }
+  }
   if (!violation && !matched) violation = parsed ? "illegal" : "parse";
   let action = matched;
+  void repaired;
   if (!action) {
     const fb = cfg.fallback ?? "fold";
     action = (fb === "call" ? legal.find((a) => a.type === "CALL") : legal.find((a) => a.type === "FOLD")) ?? legal[0];
