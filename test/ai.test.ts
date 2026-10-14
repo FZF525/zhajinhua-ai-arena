@@ -1,13 +1,15 @@
 // AI 用例:合法性 / 守恒 / 性格差异 / MC 采样正确性
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeConfig } from "../src/config.ts";
+import { makeConfig, makeBalancedConfig, mergeConfig } from "../src/config.ts";
 import { createGame, checkInvariants, player, isAlive } from "../src/state.ts";
 import { apply, advance } from "../src/engine.ts";
 import { makeAgent, AI_NAMES, AGENTS, PROFILES, MC_PROFILES } from "../src/ai/index.ts";
 import { determinize, enumerateActions, simulateAction, exchangeGain } from "../src/env.ts";
 import { createRng } from "../src/rng.ts";
 import { mcDecide } from "../src/ai/montecarlo.ts";
+import { cardsFromIds } from "../src/cards.ts";
+import { legalActions } from "../src/validate.ts";
 
 function fresh(names: string[], seed = 7, patch?: unknown) {
   const st = createGame(makeConfig({ players: { startPoints: 20000 }, endGame: { maxHands: 4, winAtOrAbove: 1e9, bustAtOrBelow: -1, winTakesPriorityOverBust: true }, ...(patch as object ?? {}) }), names, seed);
@@ -155,4 +157,31 @@ test("AI-09 MC 算牌:已经亮出来的弃牌不会被重新洗牌(属于已知
   const all = [...world.deck, ...world.pool, ...world.players.flatMap((p) => p.hand)].map((c) => c.id).sort();
   const all0 = [...st.deck, ...st.pool, ...st.players.flatMap((p) => p.hand)].map((c) => c.id).sort();
   assert.deepEqual(all, all0);
+});
+
+test("AI-10 负债不该只会弃牌:欠债模式下按名义筹码评估,非欠债模式才只能弃", () => {
+  const mk = (debt: boolean) => {
+    const cfg = mergeConfig(makeBalancedConfig(3), {
+      players: { startPoints: 200, allowDebt: debt },
+      ante: { amount: 40 },
+      endGame: { bustAtOrBelow: -100000, winAtOrAbove: 1000000, maxHands: 20 },
+    });
+    const st = createGame(cfg, ["A", "B", "C"], 4);
+    advance(st);
+    const seat = st.turn.seat!;
+    const me = st.players[seat];
+    me.blind = false;
+    me.hand = cardsFromIds(["HEART-7", "SPADE-7", "CLUB-7", "MOON-2", "STAR-9"]);   // 三条:强牌
+    me.points = -50;                                                                 // 深度负债
+    return st;
+  };
+  const on = mk(true);
+  const aOn = makeAgent("Sam")(on, createRng(1))!;
+  assert.notEqual(aOn.type, "FOLD", "欠债模式下拿着三条不该直接弃牌,实际 " + aOn.type);
+
+  const off = mk(false);
+  const aOff = makeAgent("Sam")(off, createRng(1))!;
+  assert.equal(aOff.type, "FOLD", "非欠债模式下付不起就只能弃牌,实际 " + aOff.type);
+  assert.equal(legalActions(off).includes("CALL"), false, "非欠债模式下不该提供 CALL");
+  assert.equal(legalActions(on).includes("CALL"), true, "欠债模式下应提供 CALL");
 });

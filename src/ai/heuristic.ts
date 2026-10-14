@@ -7,6 +7,17 @@ import { evaluate, compare as compareHands } from "../evaluator.ts";
 import { enumerateActions, bestDiscard, exchangeGain } from "../env.ts";
 import type { Policy } from "../env.ts";
 import type { Rng } from "../rng.ts";
+import type { GameConfig } from "../config.ts";
+
+/**
+ * 决策用的"有效筹码"。
+ * 欠债模式下按**名义筹码**(初始积分)评估 —— 引擎已经允许把分打到负数,AI 不该自己把限制加回来
+ * (否则一负债就只会弃牌,观众看到的就是"全员秒弃")。
+ * 非欠债模式下就是真实积分,风险比例控制照旧。
+ */
+export function effectivePoints(points: number, cfg: GameConfig): number {
+  return cfg.players.allowDebt === true ? Math.max(points, cfg.players.startPoints) : points;
+}
 
 export interface Profile {
   name: string;
@@ -78,14 +89,14 @@ export function auxDecision(st: GameState, rng: Rng, profile: Profile): Action |
   // ① 闷牌:便宜就继续闷,牌局变贵或攒够轮数再看牌
   if (me.blind && has("VIEW_HAND")) {
     const cost = callCost(st, seat).total;
-    const shouldPeek = st.betting.roundIndex > profile.blindRounds || cost > me.points * 0.01 || st.multiplier >= 4;
+    const shouldPeek = st.betting.roundIndex > profile.blindRounds || cost > effectivePoints(me.points, st.config) * 0.01 || st.multiplier >= 4;
     if (shouldPeek) return of("VIEW_HAND")[0];
   }
 
   // ② 换牌:能提升牌力就换(受次数与费用限制)
   if (has("EXCHANGE") && !me.blind && me.exchangeCount < profile.wantExchanges) {
     const fee = exchangeCost(st, seat).total;
-    if (affordable(me.points, fee, profile)) {
+    if (affordable(effectivePoints(me.points, st.config), fee, profile)) {
       const scored = of("EXCHANGE").map((a) => {
         const ex = a as Action & { takeCardId: string };
         const card = st.pool.find((c) => c.id === ex.takeCardId)!;
@@ -102,13 +113,13 @@ export function auxDecision(st: GameState, rng: Rng, profile: Profile): Action |
     const fee = interceptCost(st, w.cardId, w.n).total;
     const gain = card ? exchangeGain(st, me, card) : -1;
     const worth = gain >= 1 || (gain >= 0 && rng.int(100) < profile.interceptAppetite * 100);
-    if (worth && affordable(me.points, fee, profile)) return of("INTERCEPT")[0];
+    if (worth && affordable(effectivePoints(me.points, st.config), fee, profile)) return of("INTERCEPT")[0];
   }
 
   // ④ 踢牌:换一张暗牌给自己留着(弱牌时更愿意赌)
   if (has("KICK") && !me.kickUsed && rng.int(100) < profile.kickAppetite * 100) {
     const fee = kickCost(st).total;
-    if (affordable(me.points, fee, profile)) return of("KICK")[0];
+    if (affordable(effectivePoints(me.points, st.config), fee, profile)) return of("KICK")[0];
   }
 
   // ⑤ 自己踢出的暗牌:收束后觉得值得就换走,否则公开
@@ -118,7 +129,7 @@ export function auxDecision(st: GameState, rng: Rng, profile: Profile): Action |
       const card = st.pool.find((c) => c.id === blk.cardId);
       const fee = exchangeCost(st, seat).total;
       const gain = card ? exchangeGain(st, me, card) : -1;
-      if (card && gain >= 1 && affordable(me.points, fee, profile)) return of("TAKE_BLOCKED")[0];
+      if (card && gain >= 1 && affordable(effectivePoints(me.points, st.config), fee, profile)) return of("TAKE_BLOCKED")[0];
       return of("PASS_BLOCKED")[0];
     }
   }
@@ -138,13 +149,13 @@ export function mainDecision(st: GameState, rng: Rng, profile: Profile): Action 
   const call = callCost(st, seat).total;
   const raiseAct = of("RAISE")[0];
   const raiseAmt = raiseAct ? raiseCost(st, seat, (raiseAct as Action & { toMultiplier: number }).toMultiplier).total : Infinity;
-  const canRaise = !!raiseAct && me.points >= raiseAmt;
-  const canCall = me.points >= call;
-  const canCompare = has("COMPARE") && me.points >= compareCost(st, seat).total;
+  const canRaise = !!raiseAct && effectivePoints(me.points, st.config) >= raiseAmt;
+  const canCall = effectivePoints(me.points, st.config) >= call;
+  const canCompare = has("COMPARE") && effectivePoints(me.points, st.config) >= compareCost(st, seat).total;
   const potOdds = call / (st.pot + call + 1);
 
   // 比牌:牌力够硬,或对手只剩 1 人且注码已经很贵
-  if (canCompare && (s >= profile.compareAt || (opponents === 1 && call > me.points * 0.01 && s >= profile.foldBelow))) {
+  if (canCompare && (s >= profile.compareAt || (opponents === 1 && call > effectivePoints(me.points, st.config) * 0.01 && s >= profile.foldBelow))) {
     const targets = of("COMPARE") as Array<Action & { targetSeat: number }>;
     const weakTarget = targets.find((a) => player(st, a.targetSeat).blind) ?? targets[0];
     return weakTarget;

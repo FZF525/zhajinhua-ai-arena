@@ -254,6 +254,7 @@ export function validateNumbers(base: GameConfig, ov: NumberOverrides): NumberIs
     if (gap < ante * 100) issues.push({ field: "winAtOrAbove", level: "warn", message: "阈值差只有底注的 " + Math.round(gap / ante) + " 倍,实测这种比例常常 1~2 手就结束;想打 20 手左右,让差值达到底注的 500~2000 倍。" });
   }
   if (bust >= sp) issues.push({ field: "bustAtOrBelow", level: "error", message: "破产阈值(" + bust + ")必须小于初始积分(" + sp + "),否则开局即出局。" });
+  if (allowDebt && bust < -(ante * 50)) issues.push({ field: "bustAtOrBelow", level: "warn", message: "欠债几乎无上限(破产阈值 " + bust + "):付不起也能付,弃牌就失去意义,实测牌局会退化成「人人跟到底」(动作数暴增十几倍)。建议把破产阈值设在 -" + ante * 20 + " 到 -" + ante * 50 + " 之间(约 20 到 50 倍底注)。" });
   if (maxHands !== null && (typeof maxHands !== "number" || !Number.isFinite(maxHands) || maxHands < 1)) issues.push({ field: "maxHands", level: "error", message: "局数上限必须是 ≥1 的整数,或留空表示不限" });
   return issues;
 }
