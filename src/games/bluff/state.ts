@@ -82,6 +82,8 @@ export interface BluffState {
   challengeLedger: number[];
   /** 藏起来的「质疑成功次数」(每座位)。盘末按均值偏差 × challengeWinsBonus 补分 ✓ */
   challengeWins: number[];
+  /** 撒谎奖励的私下账本:局内**不进 points**(否则积分实时跳动会暴露"谁刚骗成了")✓ 局末才结算 */
+  bluffLedger: number[];
   events: Array<{ kind: string } & Record<string, unknown>>;
   handOver: boolean;
   over: boolean;                 // 一盘结束
@@ -132,6 +134,7 @@ export function createBluffGame(cfg: BluffConfig, names: string[], seed: number)
     exhibition: null,
     challengeLedger: names.map(() => 0),
     challengeWins: names.map(() => 0),
+    bluffLedger: names.map(() => 0),
     events: [],
     handOver: false,
     over: false,

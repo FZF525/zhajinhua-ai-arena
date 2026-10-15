@@ -7,7 +7,7 @@ import type { Card } from "../src/cards.ts";
 import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, BLUFF_BUST_MODES, createBluffGame, cardCount, rankOf, isHonestCard, describeExhibition } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
-import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand, settleChallengeLedger } from "../src/games/bluff/rules.ts";
+import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand, settleChallengeLedger, settleBluffLedger } from "../src/games/bluff/rules.ts";
 import { BLUFF_PERSONAS, createAdaptiveAgent, createEvolvingAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
 import { describeBluffLog } from "../src/games/bluff/format.ts";
 
@@ -640,4 +640,28 @@ test("BLUFF-26 铁律:盘中日志绝不能出现「骗过全场」(那等于当
     const log = describeBluffLog(st, NAMES, 20).join(" | ");
     assert.ok(!log.includes("骗过全场"), "盘中日志不该出现「骗过全场」: " + log);
   }
+});
+
+test("BLUFF-27 铁律:撒谎奖励在局内不进 points(否则积分实时跳动会暴露「谁刚骗成了」)", () => {
+  const cfg = { ...DEFAULT_BLUFF_CONFIG, drawMode: "one" as const, bluffBonus: 5 };
+  const st = newBluffGame(cfg, NAMES, 1401);
+  const seat = st.turn;
+  const junk = st.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, st.roundRank, st.wildRank)).slice(0, 2).map((c) => c.id);
+  give(st, seat, junk);
+  play(st, seat, junk);
+  const before = st.seats.map((p) => p.points);
+  if (!st.handOver) {
+    const next = st.turn;
+    play(st, next, [st.seats[next].hand[0].id]);      // 下家出牌 = 不质疑 → 上一手骗过全场
+    const paid = st.events.filter((e) => e.kind === "BLUFF_PAID");
+    if (paid.length) {
+      assert.ok(st.bluffLedger.some((x) => x !== 0), "应当记进私下账本");
+      assert.deepEqual(st.seats.map((p) => p.points), before, "局内 points 必须一动不动(否则界面上的积分会泄露信息)");
+    }
+  }
+  // 局末结算后,账本要如实入分且零和
+  const total0 = st.seats.reduce((a, b) => a + b.points, 0);
+  const led = settleBluffLedger(st);
+  assert.equal(Math.round(led.reduce((a, b) => a + b, 0) * 100) / 100, 0, "私下账本必须零和");
+  assert.equal(st.seats.reduce((a, b) => a + b.points, 0), total0, "入分后整体分不变(只是位移)");
 });

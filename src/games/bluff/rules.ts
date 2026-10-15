@@ -84,7 +84,17 @@ function bonueFix(bonus: number[], drift: number): void {
   bonus[best] = Math.round((bonus[best] - drift) * 100) / 100;
 }
 
+/** 把撒谎奖励的私下账本入分(局末调用:此时本局已结束,展览会公开一切 ✓) */
+export function settleBluffLedger(st: BluffState): number[] {
+  const led = st.bluffLedger;
+  if (!led.some((x) => x !== 0)) return led.slice();
+  led.forEach((v, i) => { st.seats[i].points += v; });
+  st.events.push({ kind: "BLUFF_SETTLE", bonus: led.slice() });
+  return led.slice();
+}
+
 export function settleHand(st: BluffState): number[] {
+  settleBluffLedger(st);        // 先把"骗过全场"的私下账本入分(局内一直是藏着的 ✓)
   const sizes = st.seats.map((p) => p.hand.length);
   const mean = sizes.reduce((a, b) => a + b, 0) / sizes.length;
   const scores = sizes.map((n) => Math.round((mean - n) * st.cfg.rate));
@@ -203,9 +213,10 @@ export function play(st: BluffState, seat: number, cardIds: string[], declaredRa
     if (bonus > 0) {
       const lied = st.pending.cards.some((c) => !isHonestCard(c, st.pending!.declaredRank, st.wildRank));
       if (lied) {
+        // 关键:只记在私下账本里,**不动 points** —— 否则积分实时跳动 = 当场告诉所有人谁骗成了 ✗
         const payers = st.seats.filter((p) => p.seat !== st.pending!.seat);
-        payers.forEach((p) => { p.points -= bonus; });
-        st.seats[st.pending!.seat].points += bonus * payers.length;
+        payers.forEach((p) => { st.bluffLedger[p.seat] -= bonus; });
+        st.bluffLedger[st.pending!.seat] += bonus * payers.length;
         st.events.push({ kind: "BLUFF_PAID", by: st.pending!.seat, count: st.pending!.cards.length, declaredRank: st.pending!.declaredRank, bonus, perPayer: bonus, total: bonus * payers.length });
       }
     }
