@@ -53,15 +53,29 @@ export function startHand(st: BluffState): void {
 export function settleChallengeLedger(st: BluffState): number[] {
   if ((st.cfg.challengeSettle ?? "hidden") !== "hidden") return st.challengeLedger.slice();
   const led = st.challengeLedger;
-  if (!led.some((x) => x !== 0)) return led.slice();
-  const mean = led.reduce((a, b) => a + b, 0) / led.length;
-  const bonus = led.map((x) => Math.round((x - mean) * 100) / 100);
-  // 抹掉四舍五入的尾差,保证严格零和
-  const drift = Math.round(bonus.reduce((a, b) => a + b, 0) * 100) / 100;
-  if (drift !== 0) bonueFix(bonus, drift);
-  bonus.forEach((v, i) => { st.seats[i].points += v; });
-  st.events.push({ kind: "CHALLENGE_SETTLE", bonus, ledger: led.slice(), mean: Math.round(mean * 100) / 100 });
-  return bonus;
+  const wins = st.challengeWins;
+  const k = Math.max(0, st.cfg.challengeWinsBonus ?? 0);
+  const anyLedger = led.some((x) => x !== 0);
+  const anyWins = k > 0 && wins.some((x) => x !== 0);
+  if (!anyLedger && !anyWins) return led.slice();
+  const bonus = led.map(() => 0);
+  const meanOf = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+  // 第一层:质疑分与均值的偏差
+  if (anyLedger) {
+    const m = meanOf(led);
+    led.forEach((v, i) => { bonus[i] += v - m; });
+  }
+  // 第二层:成功次数与均值的偏差 × 每点分
+  if (anyWins) {
+    const m = meanOf(wins);
+    wins.forEach((v, i) => { bonus[i] += (v - m) * k; });
+  }
+  const rounded = bonus.map((v) => Math.round(v * 100) / 100);
+  const drift = Math.round(rounded.reduce((a, b) => a + b, 0) * 100) / 100;
+  if (drift !== 0) bonueFix(rounded, drift);
+  rounded.forEach((v, i) => { st.seats[i].points += v; });
+  st.events.push({ kind: "CHALLENGE_SETTLE", bonus: rounded, ledger: led.slice(), wins: wins.slice(), winsPer: k });
+  return rounded;
 }
 
 function bonueFix(bonus: number[], drift: number): void {
@@ -219,6 +233,7 @@ export function challenge(st: BluffState, seat: number): BluffResult {
     if (honest && fee > 0) st.seats[pend.seat].points += fee;    // 立即模式下,扣的分转给被质疑者(零和)
   } else {
     st.challengeLedger[seat] += delta;
+    if (!honest) st.challengeWins[seat] += 1;   // 猜对了 → 记一次成功(藏起来,盘末按均值偏差补)
   }
   const ev = { kind: "CHALLENGE", by: seat, against: pend.seat, honest, eater, pot: pot.length, fee: honest ? fee : 0, win: honest ? 0 : win, settle: settleMode };
   st.events.push(ev);

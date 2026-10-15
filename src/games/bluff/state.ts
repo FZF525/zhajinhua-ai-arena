@@ -22,6 +22,8 @@ export interface BluffConfig {
   challengeWin?: number;
   /** 质疑分怎么结算:immediate = 立即入账(公开);hidden = 先私下记账,一盘结束按"与均值的偏差"补分(默认 hidden) */
   challengeSettle?: "immediate" | "hidden";
+  /** 藏起来的「质疑成功次数」在盘末按均值偏差折算多少分/次(0 = 不算这笔)。默认 0 */
+  challengeWinsBonus?: number;
 }
 
 /** 两种爆牌线(作者定的两种玩法):紧 = 40 张,松 = 52 张(= 两副手牌量)*/
@@ -71,6 +73,8 @@ export interface BluffState {
   exhibition: BluffExhibition | null;         // 上一局的展览
   /** 质疑分账本(每座位一份)。hidden 模式下它**不进 points**,一盘结束才按偏差补 ✓ */
   challengeLedger: number[];
+  /** 藏起来的「质疑成功次数」(每座位)。盘末按均值偏差 × challengeWinsBonus 补分 ✓ */
+  challengeWins: number[];
   events: Array<{ kind: string } & Record<string, unknown>>;
   handOver: boolean;
   over: boolean;                 // 一盘结束
@@ -120,6 +124,7 @@ export function createBluffGame(cfg: BluffConfig, names: string[], seed: number)
     claims: [],
     exhibition: null,
     challengeLedger: names.map(() => 0),
+    challengeWins: names.map(() => 0),
     events: [],
     handOver: false,
     over: false,

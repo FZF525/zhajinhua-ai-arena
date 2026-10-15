@@ -24,7 +24,8 @@ const DRAW = arg("draw", "choose3") === "one" ? "one" as const : "choose3" as co
 const BUST = arg("bust", "52") === "40" || arg("bust", "52") === "tight" ? BLUFF_BUST_MODES.tight : BLUFF_BUST_MODES.loose;
 const FEE = Number(arg("fee", "0"));
 const WIN = Number(arg("win", "0"));
-const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BUST, rate: 1, handsPerMatch: 4, drawMode: DRAW, challengeFee: FEE, challengeWin: WIN };
+const WINS_BONUS = Number(arg("wins", "0"));   // 藏起来的成功次数,盘末按均值偏差折算多少分/次
+const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BUST, rate: 1, handsPerMatch: 4, drawMode: DRAW, challengeFee: FEE, challengeWin: WIN, challengeWinsBonus: WINS_BONUS };
 // 学习速度:α 越大越信结构模型、越慢(实测 α 会改变排名,所以暴露出来)
 const ALPHA = Number(arg("alpha", "6"));
 // --trace:打印 Lynn 自己的演化轨迹(它每盘会变异一次,表现更好就留下)

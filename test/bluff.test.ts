@@ -531,3 +531,43 @@ test("BLUFF-21 质疑的盈亏平衡点:AI 不会在 p 低于 fee/(win+fee) 时�
   // 面对"真话"(pCheat 很低)时应该出牌而不是质疑
   assert.equal(act.type, "PLAY", "低于平衡点就不该质疑,实际:" + act.type);
 });
+
+test("BLUFF-22 藏起来的成功次数:猜对才计数,盘末按次数均值偏差补分(零和)", () => {
+  const cfg = { ...DEFAULT_BLUFF_CONFIG, challengeFee: 5, challengeWin: 3, challengeWinsBonus: 2 };
+  // 甲猜对一次(记 +3 与 1 次),乙猜错一次(记 -5 与 0 次)
+  const st = newBluffGame(cfg, NAMES, 1001);
+  const s1 = st.turn;
+  const fake = st.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, st.roundRank, st.wildRank)).slice(0, 1).map((c) => c.id);
+  give(st, s1, fake);
+  play(st, s1, fake);
+  const ch1 = st.turn;
+  challenge(st, ch1);                       // 猜对
+  assert.equal(st.challengeWins[ch1], 1, "猜对应当记 1 次成功");
+  assert.equal(st.challengeLedger[ch1], 3, "并记 +3 分");
+
+  // 让下家打**真牌**(明确指定并打出那几张)→ 我去质疑 → 必然猜错
+  if (!st.handOver) {
+    const s2 = st.turn;
+    const R = st.roundRank, W = st.wildRank;
+    const honestIds = st.seats.flatMap((p) => p.hand).filter((c) => isHonestCard(c, R, W)).slice(0, 2).map((c) => c.id);
+    give(st, s2, honestIds);
+    play(st, s2, honestIds);
+    if (!st.handOver) {
+      const ch2 = st.turn;
+      challenge(st, ch2);                   // 猜错(人家说的是真话)
+      if (!st.handOver) {
+        assert.equal(st.challengeWins[ch2], 0, "猜错不记成功次数");
+        assert.equal(st.challengeLedger[ch2], -5, "猜错记 -5 分");
+      }
+    }
+  }
+  const before = st.seats.reduce((s, p) => s + p.points, 0);
+  const bonus = settleChallengeLedger(st);
+  assert.equal(Math.round(bonus.reduce((a, b) => a + b, 0) * 100) / 100, 0, "两层补分合起来必须零和");
+  const after = st.seats.reduce((s, p) => s + p.points, 0);
+  assert.equal(Math.abs(after - before) < 1e-6, true, "整体分不凭空增减");
+  // 成功次数最多的人一定拿到正的次数奖金
+  const top = st.challengeWins.indexOf(Math.max(...st.challengeWins));
+  const ev = st.events.filter((e) => e.kind === "CHALLENGE_SETTLE").pop() as { winsPer: number; wins: number[] };
+  assert.ok(ev.winsPer > 0 && ev.wins[top] === 1);
+});
