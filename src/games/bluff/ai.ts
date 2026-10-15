@@ -250,6 +250,9 @@ export function createEvolvingAgent(seed = 1, rngIn?: Rng): EvolvingAgent {
   let opts: BluffAiOptions = { ...DEFAULT_EXCEL };
   let agent = createAdaptiveAgent(opts);
   let bestScore = -Infinity;
+  let bestAvg = -Infinity;
+  const window: number[] = [];
+  const WINDOW = 5;                       // 每 5 盘评估一次变异(盘数太少会全是噪声)
   let pending: BluffAiOptions | null = null;
   const self: EvolvingAgent = {
     name: "Lynn",
@@ -260,14 +263,20 @@ export function createEvolvingAgent(seed = 1, rngIn?: Rng): EvolvingAgent {
     observeHand: (st: BluffState) => agent.observeHand(st),
     statsFor: (seat: number, k: number) => agent.statsFor(seat, k),
     endMatch(score: number) {
-      // 更好 → 保留这次变异(代数 +1);更差 → 回退到旧参数
-      if (score >= bestScore) {
-        bestScore = score;
-        if (pending) { opts = pending; self.generation += 1; }
+      // 单盘最好成绩在高方差游戏里几乎打不破(实测 200 盘一次都没进化)→ 改用「窗口平均」:
+      // 每 WINDOW 盘评估一次:这组参数的平均成绩 ≥ 历史最好平均 → 保留变异,否则回退
+      window.push(score);
+      if (window.length >= WINDOW) {
+        const avg = window.reduce((s, v) => s + v, 0) / window.length;
+        if (avg >= bestAvg) {
+          bestAvg = avg;
+          bestScore = Math.max(bestScore, ...window);
+          if (pending) { opts = pending; self.generation += 1; }
+        }
+        window.length = 0;
+        agent = createAdaptiveAgent(opts);
+        pending = mutateOpts(opts, rng);
       }
-      // 无论留还是退,都重建自适应模型(每盘重建是这套 AI 的规矩)
-      agent = createAdaptiveAgent(opts);
-      pending = mutateOpts(opts, rng);
     },
   };
   pending = mutateOpts(opts, rng);
