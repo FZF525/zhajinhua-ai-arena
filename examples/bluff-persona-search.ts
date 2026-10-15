@@ -11,7 +11,7 @@ import { createRng } from "../src/rng.ts";
 
 const N = Number(process.argv[2] ?? "40");
 const M = Number(process.argv[3] ?? "60");
-const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES.loose, rate: 1, handsPerMatch: 4, drawMode: "choose3" as const, challengeFee: 5, challengeWin: 3, challengeWinsBonus: 30 };
+const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES.loose, rate: 1, handsPerMatch: 4, drawMode: "choose3" as const, challengeFee: 5, challengeWin: 3, challengeWinsBonus: 30, bluffBonus: 0.5 };
 // 固定对手场:标准型 + 老实人 + 多疑者(候选者坐第 4 席,座位轮换)
 const FIELD = ["Bajiao", "Nannan", "Nizi"] as const;
 

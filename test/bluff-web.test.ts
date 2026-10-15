@@ -83,6 +83,9 @@ test("BLUFF-WEB-02 质疑账本盘中必须藏住,只有一盘结束才揭晓", 
   assert.equal(v0.challengeReveal, null, "开局时绝不能有账本");
   assert.equal(v0.challengeRule.fee, 5, "默认预设应当是 -5");
   assert.equal(v0.challengeRule.win, 3, "默认预设应当是 +3");
+  assert.equal(v0.challengeRule.bluffBonus, 0.5, "默认撒谎奖励应当是 0.5(实测最均衡)");
+  const s2 = createBluffSession({ bust: "loose", kinds: ["human", "Bajiao", "Nizi", "Nannan"], bluffBonus: 0 });
+  assert.equal(bluffSeatView(s2, 0).challengeRule.bluffBonus, 0, "可以关掉撒谎奖励");
   assert.ok(!JSON.stringify(v0).includes("challengeReveal\":{" ), "视图里不该出现账本内容");
   // 一路打到一盘结束
   let guard = 0;

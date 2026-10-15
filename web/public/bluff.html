@@ -96,6 +96,13 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
         <option value="light">+2/-5 私下记账</option>
         <option value="off">不算质疑分</option>
       </select>
+      <label class="hint">撒谎奖励</label>
+      <select id="bluffSel">
+        <option value="0">0(撒谎无奖励)</option>
+        <option value="0.5" selected>0.5(实测最均衡)</option>
+        <option value="1">1</option>
+        <option value="2">2(重奖撒谎)</option>
+      </select>
       <label class="hint">AI 出手速度</label>
       <select id="speedSel"><option value="900">慢(看得清)</option><option value="420" selected>中</option><option value="120">快</option><option value="0">不停顿</option></select>
       <button id="btnNew" class="primary">开新盘</button>
@@ -142,7 +149,7 @@ function render() {
   $('handNo').textContent = view.handNo; $('matchNo').textContent = view.matchNo;
   $('wild').textContent = view.wildText; $('rank').textContent = view.roundText;
   $('pile').textContent = view.pileCount;
-  $('bustMode').textContent = ($('bustSel').value === 'loose' ? '爆牌线 52' : '爆牌线 40');
+  $('bustMode').textContent = ($('bustSel').value === 'loose' ? '爆牌线 52' : '爆牌线 40') + ' · 撒谎奖励 ' + (view.challengeRule ? view.challengeRule.bluffBonus : 0);
   var mine = view.turn === seat;
   $('turnWho').textContent = view.over ? '一盘结束' : (view.handOver ? '本局结束' : (mine ? '轮到你' : '轮到 ' + view.seats[view.turn].name));
   $('turnHint').textContent = view.over ? '' : (view.handOver ? '本局结束,点「下一局」' : (mine ? '轮到你了:选 1~5 张牌,或质疑上一手' : '等 ' + view.seats[view.turn].name + ' 出牌(座位 ' + view.turn + ')'));
@@ -232,12 +239,12 @@ $('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); re
 $('speedSel').onchange = function () { schedule(); };
 $('btnNew').onclick = function () {
   var kinds = ['human', $('kind1').value, $('kind2').value, $('kind3').value];
-  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, seats: kinds }).then(function (r) {
+  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, bluff: Number($('bluffSel').value), seats: kinds }).then(function (r) {
     if (!r.ok) { toast(r.error); return; }
     view = r.view; sel.clear(); render(); schedule();
   });
 };
-api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
+api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, bluff: Number($('bluffSel').value), seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
   .then(function (r) { if (r.ok) { view = r.view; render(); schedule(); } })
   .catch(function () { });
 </script>

@@ -52,6 +52,8 @@ export interface BluffSessionOptions {
   drawMode?: "one" | "choose3";
   /** 质疑规则:+win / -fee,以及藏起来的成功次数奖金(分/次) */
   challenge?: { win: number; fee: number; winsBonus: number };
+  /** 撒谎成功奖励:一手谎话没人质疑 → 其他三家各付这么多分(零和)。默认 0.5(实测最均衡) */
+  bluffBonus?: number;
 }
 
 /** 质疑规则预设:界面上只给三个选项 ✓ */
@@ -64,7 +66,8 @@ export const CHALLENGE_PRESETS: Record<string, { label: string; win: number; fee
 export function createBluffSession(opts: BluffSessionOptions): BluffSession {
   const { bust, kinds, seed, drawMode = "one" } = opts;
   const ch = opts.challenge ?? CHALLENGE_PRESETS.standard;
-  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode, challengeFee: Math.max(0, ch.fee), challengeWin: Math.max(0, ch.win), challengeWinsBonus: Math.max(0, ch.winsBonus) };
+  const bluffBonus = Math.max(0, opts.bluffBonus ?? 0.5);
+  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode, challengeFee: Math.max(0, ch.fee), challengeWin: Math.max(0, ch.win), challengeWinsBonus: Math.max(0, ch.winsBonus), bluffBonus };
   const names = ["你", "左边", "对面", "右边"];
   const s = Math.floor((seed ?? Date.now()) % 100000);
   const state = newBluffGame(cfg, names, s);
@@ -98,7 +101,7 @@ export interface BluffSeatView {
   lastScores: number[];
   exhibition: { text: string; lines: string[] } | null;
   /** 当前质疑规则(常驻,便于界面显示)*/
-  challengeRule: { win: number; fee: number; winsBonus: number };
+  challengeRule: { win: number; fee: number; winsBonus: number; bluffBonus: number };
   /** **只有一盘结束时才出现** —— 盘中绝不泄露(谁质疑得准是隐藏信息)✓ */
   challengeReveal: { name: string; ledger: number; wins: number; bonus: number }[] | null;
   log: string[];
@@ -134,7 +137,7 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     bustedSeat: st.bustedSeat,
     lastScores: st.lastScores,
     exhibition: ex ? { text: lines.join(String.fromCharCode(10)), lines } : null,
-    challengeRule: { win: st.cfg.challengeWin ?? 0, fee: st.cfg.challengeFee ?? 0, winsBonus: st.cfg.challengeWinsBonus ?? 0 },
+    challengeRule: { win: st.cfg.challengeWin ?? 0, fee: st.cfg.challengeFee ?? 0, winsBonus: st.cfg.challengeWinsBonus ?? 0, bluffBonus: st.cfg.bluffBonus ?? 0 },
     challengeReveal: st.over
       ? (() => {
           const ev = [...st.events].reverse().find((x) => x.kind === "CHALLENGE_SETTLE") as { bonus: number[]; ledger: number[]; wins: number[] } | undefined;

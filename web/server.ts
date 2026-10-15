@@ -181,7 +181,8 @@ const server = http.createServer(async (req, res) => {
     const drawMode: "one" | "choose3" = body.draw === "choose3" ? "choose3" : "one";
     const presetKey = String(body.challenge ?? "standard");
     const preset = CHALLENGE_PRESETS[presetKey] ?? CHALLENGE_PRESETS.standard;
-    bluff = createBluffSession({ bust, kinds: parsed.kinds, drawMode, challenge: preset });
+    const bluffBonus = Math.max(0, Math.min(20, Number(body.bluff ?? 0.5) || 0));
+    bluff = createBluffSession({ bust, kinds: parsed.kinds, drawMode, challenge: preset, bluffBonus });
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
   }
   if (path === "/api/bluff/step" && req.method === "POST") {
