@@ -7,7 +7,7 @@ import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, BLUFF_BUST_MODES, createBluffGame, cardCount, rankOf, isHonestCard, describeExhibition } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand, settleChallengeLedger } from "../src/games/bluff/rules.ts";
-import { createAdaptiveAgent, createEvolvingAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
+import { BLUFF_PERSONAS, createAdaptiveAgent, createEvolvingAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
 
 const NAMES = ["A", "B", "C", "D"];
 function fresh(seed = 7): BluffState {
@@ -570,4 +570,16 @@ test("BLUFF-22 藏起来的成功次数:猜对才计数,盘末按次数均值偏
   const top = st.challengeWins.indexOf(Math.max(...st.challengeWins));
   const ev = st.events.filter((e) => e.kind === "CHALLENGE_SETTLE").pop() as { winsPer: number; wins: number[] };
   assert.ok(ev.winsPer > 0 && ev.wins[top] === 1);
+});
+
+test("BLUFF-23 阵容名单:六位性格齐全,Caocao 是数据发现的那组参数", () => {
+  const names = Object.keys(BLUFF_PERSONAS);
+  for (const n of ["Lao6", "Bajiao", "Nizi", "Nannan", "Xiaozhen", "Caocao"]) {
+    assert.ok(names.includes(n), "阵容里应当有 " + n + ",实际:" + names.join(","));
+  }
+  const c = BLUFF_PERSONAS.Caocao;
+  assert.equal(c.challengeAt, 0.38, "Caocao 的质疑门槛应当是最优组里的 0.38(全场最爱质疑)");
+  assert.ok(c.challengeAt < BLUFF_PERSONAS.Nannan.challengeAt, "它应当比囡囡爱质疑");
+  assert.equal(c.maxHonest, 5, "敢出满 5 张");
+  assert.ok(c.bustFear < BLUFF_PERSONAS.Nannan.bustFear, "且比囡囡不怕爆");
 });

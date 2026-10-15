@@ -42,11 +42,13 @@ export const DEFAULT_EXCEL: BluffAiOptions = {
 export const BLUFF_NAMES = ["Lao6", "Bajiao", "Nizi", "Nannan", "Xiaozhen"] as const;
 /** 三种现成性格:保守(老实人)/ 标准 / 激进(赌徒) */
 export const BLUFF_PERSONAS: Record<string, BluffAiOptions> = {
-  // 【数据发现】作者请不要误会:这不是手拍的,而是 40 组随机参数 × 60 盘、再用 400 盘复核选出来的最优组 ✓
+  // 【Caocao 曹操】数据发现的性格(名字由作者定):40 组随机参数 × 60 盘 → 400 盘复核选出的最优组 ✓
+  //   画像:**多疑(0.38 全场最爱质疑)+ 略贪(0.16)+ 不怕爆(1.26)+ 敢出满 5 张** —— 与"谨慎精准"相反 ✓
+  //   来历:不是手拍,是数据长出来的 ✓(+36.7 分/盘,t=14.71,夺冠 63%)
   //   参数 0.38 / 0.16 / 2 / 5 / 1.26 → +36.7 分/盘(t=14.71,夺冠 63%),明显强于手拍的小针(+13.8)
   //   画像:**多质疑(0.38)+ 略贪(0.16)+ 不怕爆(1.26)+ 敢出满 5 张** —— 和"谨慎精准"正好相反 ✓
   //   名字待作者定;先用 discovered 作为占位 ✓
-  discovered: { challengeAt: 0.38, greed: 0.16, maxLie: 2, maxHonest: 5, bustFear: 1.26, oppBluffSize: 1 },
+  Caocao: { challengeAt: 0.38, greed: 0.16, maxLie: 2, maxHonest: 5, bustFear: 1.26, oppBluffSize: 1 },
   // 小针:精准狙击 —— 手拍参数(作者原始设计),实测只有 +13.8 分/盘,保留作为"设计型基线"
 
   Xiaozhen: { challengeAt: 0.78, maxLie: 2, maxHonest: 5, greed: 0, bustFear: 1.8, oppBluffSize: 1 },
