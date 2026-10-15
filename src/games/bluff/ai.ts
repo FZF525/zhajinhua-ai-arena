@@ -115,7 +115,11 @@ export function excelDecide(st: BluffState, seat: number, opts: BluffAiOptions =
     const pCheat = cheatProbability(st, seat, k, opts);
     const pot = st.pile.length + k;
     const willBust = me.hand.length + pot > st.cfg.bustCards;
-    const threshold = opts.challengeAt * (willBust ? opts.bustFear : 1.0);
+    // 质疑是有赌注的:+win / -fee → 只在 pCheat > fee/(win+fee) 时才划算(精确盈亏平衡点)
+    const win = Math.max(0, st.cfg.challengeWin ?? 0);
+    const fee = Math.max(0, st.cfg.challengeFee ?? 0);
+    const breakEven = win + fee > 0 ? fee / (win + fee) : 0;
+    const threshold = Math.max(opts.challengeAt, breakEven) * (willBust ? opts.bustFear : 1.0);
     if (pCheat > threshold) return { type: "CHALLENGE", seat };
   }
   // ② 出牌

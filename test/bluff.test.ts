@@ -6,7 +6,7 @@ import type { Card } from "../src/cards.ts";
 import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, BLUFF_BUST_MODES, createBluffGame, cardCount, rankOf, isHonestCard, describeExhibition } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
-import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand } from "../src/games/bluff/rules.ts";
+import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand, settleChallengeLedger } from "../src/games/bluff/rules.ts";
 import { createAdaptiveAgent, createEvolvingAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
 
 const NAMES = ["A", "B", "C", "D"];
@@ -442,31 +442,92 @@ test("BLUFF-18 Lynn 自进化:能决策、能读账本、一盘结束后能留�
   assert.ok(before.challengeAt >= 0.2);
 });
 
-test("BLUFF-19 质疑赌注:失败者扣 5 分并转给被质疑者(零和),成功不扣", () => {
-  const cfg = { ...DEFAULT_BLUFF_CONFIG, challengeFee: 5 };
-  // 场景一:质疑一个"说真话"的人 → 质疑者应当扣 5 分
-  const st = newBluffGame(cfg, NAMES, 801);
+test("BLUFF-19 质疑分两种结算:默认私下记账(盘中不改分),immediate 模式才是立即转账", () => {
+  // 默认(hidden):失败只记账,points 不动 → 盘中看不到谁质疑得准
+  const st = newBluffGame({ ...DEFAULT_BLUFF_CONFIG, challengeFee: 5, challengeWin: 3 }, NAMES, 801);
   const seat = st.turn;
-  const R = st.roundRank, W = st.wildRank;
-  const honestIds = st.seats.flatMap((p) => p.hand).filter((c) => isHonestCard(c, R, W)).slice(0, 2).map((c) => c.id);
+  const honestIds = st.seats.flatMap((p) => p.hand).filter((c) => isHonestCard(c, st.roundRank, st.wildRank)).slice(0, 2).map((c) => c.id);
   give(st, seat, honestIds);
   play(st, seat, honestIds);
   const ch = (seat + 1) % 4;
   const before = st.seats.map((p) => p.points);
   challenge(st, ch);
-  assert.equal(st.seats[ch].points, before[ch] - 5, "质疑失败者应当扣 5 分");
-  assert.equal(st.seats[seat].points, before[seat] + 5, "这 5 分应当转给被质疑者");
-  assert.equal(st.seats.reduce((s, p) => s + p.points, 0), before.reduce((s, p) => s + p, 0), "整体必须零和");
+  assert.equal(st.challengeLedger[ch], -5, "质疑失败应当记 -5");
+  assert.deepEqual(st.seats.map((p) => p.points), before, "默认(hidden)下盘中不得改分");
 
-  // 场景二:质疑一个"说谎"的人 → 质疑成功,不扣分
-  const st2 = newBluffGame(cfg, NAMES, 802);
-  const seat2 = st2.turn;
+  // immediate:立即转账(失败者 -5、被质疑者 +5),保持零和
+  const im = newBluffGame({ ...DEFAULT_BLUFF_CONFIG, challengeFee: 5, challengeWin: 3, challengeSettle: "immediate" as const }, NAMES, 802);
+  const seatI = im.turn;
+  const honestIdsI = im.seats.flatMap((p) => p.hand).filter((c) => isHonestCard(c, im.roundRank, im.wildRank)).slice(0, 2).map((c) => c.id);
+  give(im, seatI, honestIdsI);
+  play(im, seatI, honestIdsI);
+  const chI = (seatI + 1) % 4;
+  const beforeI = im.seats.map((p) => p.points);
+  challenge(im, chI);
+  assert.equal(im.seats[chI].points, beforeI[chI] - 5, "immediate:失败者扣 5");
+  assert.equal(im.seats[seatI].points, beforeI[seatI] + 5, "immediate:这 5 分转给被质疑者");
+  assert.equal(im.seats.reduce((s, p) => s + p.points, 0), beforeI.reduce((s, p) => s + p, 0), "整体零和");
+
+  // 质疑成功 → 记 +3
+  const st2 = newBluffGame({ ...DEFAULT_BLUFF_CONFIG, challengeFee: 5, challengeWin: 3 }, NAMES, 803);
+  const s2 = st2.turn;
   const fakeIds = st2.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, st2.roundRank, st2.wildRank)).slice(0, 2).map((c) => c.id);
-  give(st2, seat2, fakeIds);
-  play(st2, seat2, fakeIds);
-  const ch2 = (seat2 + 1) % 4;
-  const before2 = st2.seats.map((p) => p.points);
+  give(st2, s2, fakeIds);
+  play(st2, s2, fakeIds);
+  const ch2 = (s2 + 1) % 4;
   challenge(st2, ch2);
-  assert.equal(st2.seats[ch2].points, before2[ch2], "质疑成功不该扣分");
-  assert.equal(st2.seats[seat2].points, before2[seat2], "被质疑者也不该因为被猜中而额外扣分");
+  assert.equal(st2.challengeLedger[ch2], 3, "质疑成功应当记 +3");
+});
+
+test("BLUFF-20 质疑分:+3/-5 先私下记账(盘中不进分),盘末按均值偏差补齐且零和", () => {
+  const cfg = { ...DEFAULT_BLUFF_CONFIG, challengeFee: 5, challengeWin: 3, challengeSettle: "hidden" as const };
+  const st = newBluffGame(cfg, NAMES, 901);
+  const seat = st.turn;
+  const R = st.roundRank, W = st.wildRank;
+  // 让上家说真话 → 我去质疑 → 我应当记 -5(但 points 不变)
+  const honestIds = st.seats.flatMap((p) => p.hand).filter((c) => isHonestCard(c, R, W)).slice(0, 1).map((c) => c.id);
+  give(st, seat, honestIds);
+  play(st, seat, honestIds);
+  const ch = (seat + 1) % 4;
+  const pointsBefore = st.seats.map((p) => p.points);
+  challenge(st, ch);
+  assert.equal(st.challengeLedger[ch], -5, "质疑失败应当记 -5");
+  assert.deepEqual(st.seats.map((p) => p.points), pointsBefore, "hidden 模式下盘中不得改动 points(信息要藏住)");
+  // 让别人猜对一次 → +3
+  const seat3 = (ch + 1) % 4;
+  const fakeIds = st.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, st.roundRank, st.wildRank)).slice(0, 1).map((c) => c.id);
+  if (!st.handOver) {
+    give(st, st.turn, fakeIds.filter((id) => st.seats[st.turn].hand.every((c) => c.id !== id)).slice(0, 1));
+    const s2 = st.turn;
+    play(st, s2, [st.seats[s2].hand[0].id]);
+    if (!st.handOver) {
+      const ch2 = st.turn;
+      challenge(st, ch2);
+      if (!st.handOver) assert.ok(st.challengeLedger[ch2] === 3 || st.challengeLedger[ch2] === -5, "记分只能是 +3 或 -5");
+    }
+  }
+  // 盘末结算:偏差之和必须为 0(零和)
+  const before = st.seats.reduce((s, p) => s + p.points, 0);
+  const bonus = settleChallengeLedger(st);
+  assert.equal(Math.round(bonus.reduce((a, b) => a + b, 0) * 100) / 100, 0, "偏差补分必须零和");
+  const after = st.seats.reduce((s, p) => s + p.points, 0);
+  assert.equal(Math.abs(after - before) < 1e-6, true, "整体分不因补分而凭空增减");
+  assert.equal(seat3 >= 0, true);
+});
+
+test("BLUFF-21 质疑的盈亏平衡点:AI 不会在 p 低于 fee/(win+fee) 时质疑", () => {
+  // +3/-5 → 平衡点 0.625:即使人设很爱质疑(0.35),也不该低于它
+  const cfg = { ...DEFAULT_BLUFF_CONFIG, challengeFee: 5, challengeWin: 3, drawMode: "choose3" as const };
+  const st = newBluffGame(cfg, NAMES, 902);
+  const seat = st.turn;
+  const R = st.roundRank, W = st.wildRank;
+  const honestIds = st.seats.flatMap((p) => p.hand).filter((c) => isHonestCard(c, R, W)).slice(0, 2).map((c) => c.id);
+  give(st, seat, honestIds);
+  play(st, seat, honestIds);
+  const ch = st.turn;
+  // 一个"最好赌"的人设:门槛 0.2 —— 但赌注下的平衡点是 0.625,所以依然不该乱质疑
+  const wild = createAdaptiveAgent({ challengeAt: 0.2, maxLie: 1, maxHonest: 5, greed: 0, bustFear: 1, oppBluffSize: 1 });
+  const act = wild.decide(st, ch);
+  // 面对"真话"(pCheat 很低)时应该出牌而不是质疑
+  assert.equal(act.type, "PLAY", "低于平衡点就不该质疑,实际:" + act.type);
 });

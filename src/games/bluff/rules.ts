@@ -48,6 +48,28 @@ export function startHand(st: BluffState): void {
 }
 
 /** 结算:零和 —— 每人得分 = (平均剩牌数 − 自己剩牌数) × 倍率 */
+/** 一盘结束时把私下账本按「与均值的偏差」结算:偏差之和为 0 → 保持零和 ✓
+ *  这样过程信息(谁质疑得准)不会在盘中泄露,但最终谁读得准还是会被奖励 ✓ */
+export function settleChallengeLedger(st: BluffState): number[] {
+  if ((st.cfg.challengeSettle ?? "hidden") !== "hidden") return st.challengeLedger.slice();
+  const led = st.challengeLedger;
+  if (!led.some((x) => x !== 0)) return led.slice();
+  const mean = led.reduce((a, b) => a + b, 0) / led.length;
+  const bonus = led.map((x) => Math.round((x - mean) * 100) / 100);
+  // 抹掉四舍五入的尾差,保证严格零和
+  const drift = Math.round(bonus.reduce((a, b) => a + b, 0) * 100) / 100;
+  if (drift !== 0) bonueFix(bonus, drift);
+  bonus.forEach((v, i) => { st.seats[i].points += v; });
+  st.events.push({ kind: "CHALLENGE_SETTLE", bonus, ledger: led.slice(), mean: Math.round(mean * 100) / 100 });
+  return bonus;
+}
+
+function bonueFix(bonus: number[], drift: number): void {
+  let best = 0;
+  for (let i = 1; i < bonus.length; i++) if (bonus[i] > bonus[best]) best = i;
+  bonus[best] = Math.round((bonus[best] - drift) * 100) / 100;
+}
+
 export function settleHand(st: BluffState): number[] {
   const sizes = st.seats.map((p) => p.hand.length);
   const mean = sizes.reduce((a, b) => a + b, 0) / sizes.length;
@@ -62,7 +84,10 @@ export function settleHand(st: BluffState): number[] {
   st.lastScores = scores;
   scores.forEach((s, i) => { st.seats[i].points += s; });
   st.events.push({ kind: "HAND_END", handNo: st.handNo, winner: st.winnerSeat, busted: st.bustedSeat, scores });
-  if (st.handNo >= st.cfg.handsPerMatch) st.over = true;   // 一盘 = 4 局
+  if (st.handNo >= st.cfg.handsPerMatch) {
+    st.over = true;                       // 一盘 = 4 局
+    settleChallengeLedger(st);            // 盘末结算私下账本(按均值偏差补分,零和)✓
+  }
   return scores;
 }
 
@@ -184,15 +209,18 @@ export function challenge(st: BluffState, seat: number): BluffResult {
   st.seats[eater].hand.push(...pot);
   st.pile = [];
   st.pending = null;
-  // 质疑失败的赌注:失败者扣分,转给被质疑者(零和守恒)
+  // 质疑分:+win(猜对)/ -fee(猜错)。hidden 模式下只记账,不进 points(一盘结束按偏差补)
+  const win = Math.max(0, st.cfg.challengeWin ?? 0);
   const fee = Math.max(0, st.cfg.challengeFee ?? 0);
-  let feePaid = 0;
-  if (fee > 0 && honest) {
-    feePaid = Math.min(fee, Math.max(0, st.seats[seat].points + 1000));   // 允许扣成负分,但防止极端
-    st.seats[seat].points -= feePaid;
-    st.seats[pend.seat].points += feePaid;
+  const delta = honest ? -fee : win;
+  const settleMode = st.cfg.challengeSettle ?? "hidden";
+  if (settleMode === "immediate") {
+    st.seats[seat].points += delta;
+    if (honest && fee > 0) st.seats[pend.seat].points += fee;    // 立即模式下,扣的分转给被质疑者(零和)
+  } else {
+    st.challengeLedger[seat] += delta;
   }
-  const ev = { kind: "CHALLENGE", by: seat, against: pend.seat, honest, eater, pot: pot.length, fee: feePaid };
+  const ev = { kind: "CHALLENGE", by: seat, against: pend.seat, honest, eater, pot: pot.length, fee: honest ? fee : 0, win: honest ? 0 : win, settle: settleMode };
   st.events.push(ev);
   // 关键:无论成败,turn 都保持质疑者(他就是上家的下家)—— 1→2→3→4 循环不破
   st.turn = seat;

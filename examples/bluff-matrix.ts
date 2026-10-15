@@ -14,7 +14,8 @@ const DRAW = arg("draw", "choose3") === "one" ? "one" as const : "choose3" as co
 const BUST = arg("bust", "52") === "40" ? BLUFF_BUST_MODES.tight : BLUFF_BUST_MODES.loose;
 const ALPHA = Number(arg("alpha", "6"));
 const FEE = Number(arg("fee", "0"));
-const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BUST, rate: 1, handsPerMatch: 4, drawMode: DRAW, challengeFee: FEE };
+const WIN = Number(arg("win", "0"));
+const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BUST, rate: 1, handsPerMatch: 4, drawMode: DRAW, challengeFee: FEE, challengeWin: WIN };
 
 function playMatch(a: string, b: string, m: number): { aCamp: number; bCamp: number } {
   const base = [a, a, b, b];

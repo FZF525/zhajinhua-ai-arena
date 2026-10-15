@@ -16,8 +16,12 @@ export interface BluffConfig {
   handsPerMatch: number;
   /** 抽点数方式:one = 每回合抽 1 个(现状);choose3 = 抽 3 个由出牌者选 1(把运气变成选择) */
   drawMode?: "one" | "choose3";
-  /** 质疑失败的赌注:失败者扣这么多分,**转给被质疑者**(保持零和)。默认 0 */
+  /** 质疑失败扣多少分(+3/-5 里的 -5)。默认 0 */
   challengeFee?: number;
+  /** 质疑成功加多少分(+3/-5 里的 +3)。默认 0 */
+  challengeWin?: number;
+  /** 质疑分怎么结算:immediate = 立即入账(公开);hidden = 先私下记账,一盘结束按"与均值的偏差"补分(默认 hidden) */
+  challengeSettle?: "immediate" | "hidden";
 }
 
 /** 两种爆牌线(作者定的两种玩法):紧 = 40 张,松 = 52 张(= 两副手牌量)*/
@@ -65,6 +69,8 @@ export interface BluffState {
   lastScores: number[];          // 上一局结算(零和)
   claims: BluffClaim[];                       // 本局所有申报(含真假统计)
   exhibition: BluffExhibition | null;         // 上一局的展览
+  /** 质疑分账本(每座位一份)。hidden 模式下它**不进 points**,一盘结束才按偏差补 ✓ */
+  challengeLedger: number[];
   events: Array<{ kind: string } & Record<string, unknown>>;
   handOver: boolean;
   over: boolean;                 // 一盘结束
@@ -113,6 +119,7 @@ export function createBluffGame(cfg: BluffConfig, names: string[], seed: number)
     lastScores: names.map(() => 0),
     claims: [],
     exhibition: null,
+    challengeLedger: names.map(() => 0),
     events: [],
     handOver: false,
     over: false,
