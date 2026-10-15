@@ -348,3 +348,34 @@ test("BLUFF-14 局末牌堆不计分:只做展览,分数只按手牌数算", () 
   assert.ok(text.includes("假牌"), "文本里要有谎话统计");
   assert.equal(st.lastScores.reduce((a, b) => a + b, 0), 0, "仍然零和");
 });
+
+test("BLUFF-15 展览要能解释「牌堆为什么是空的」:给出牌堆去向 + 逐手时间线", () => {
+  const st = newBluffGame({ ...DEFAULT_BLUFF_CONFIG, bustCards: BLUFF_BUST_MODES.tight }, NAMES, 7);
+  // 三家各出一手(不质疑),然后下家质疑 → 整堆被吃走 → 牌堆清零
+  for (let i = 0; i < 3; i++) { const q = st.seats[st.turn]; play(st, st.turn, q.hand.slice(0, 2).map((c) => c.id)); }
+  const before = st.pile.length;
+  assert.ok(before > 0, "质疑前牌堆应当非空");
+  challenge(st, st.turn);
+  assert.equal(st.pile.length, 0, "质疑结算后牌堆清零(这就是「真容为空」的原因)");
+  // 顶爆当前行动者,结束本局
+  const seat = st.turn;
+  let need = 42 - st.seats[seat].hand.length;
+  for (const p of st.seats) {
+    if (p.seat === seat || need <= 0) continue;
+    const take = Math.min(need, Math.max(0, p.hand.length - 1));
+    st.seats[seat].hand.push(...p.hand.splice(0, take));
+    need -= take;
+  }
+  play(st, seat, [st.seats[seat].hand[0].id]);
+  assert.equal(st.handOver, true, "应当结束");
+  const ex = st.exhibition!;
+  assert.equal(ex.pileSize, 0, "局末牌堆确实是 0");
+  assert.equal(ex.eaten.length, 1, "应当记录到 1 次吃牌(牌堆去向)");
+  assert.equal(ex.eaten[0].pot, before + 2, "吃掉的张数 = 原牌堆 + 那一手");
+  assert.ok(ex.timeline.length >= 4, "应当有逐手时间线,实际 " + ex.timeline.length);
+  assert.ok(ex.timeline.every((c) => c.count >= 1 && c.count <= 5), "时间线里的每手张数应当合法");
+  const text = describeExhibition(st);
+  assert.ok(text.includes("吃走") && text.includes("空"), "牌堆为空时要解释原因: " + text.split(String.fromCharCode(10))[1]);
+  assert.ok(text.includes("牌堆去向"), "要列出牌堆去向");
+  assert.ok(text.includes("逐手回顾"), "要列出逐手回顾");
+});

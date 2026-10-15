@@ -71,7 +71,13 @@ function buildExhibition(st: BluffState): void {
     const biggest = mine.reduce((mx, c) => Math.max(mx, c.count - c.honest), 0);
     return { seat: p.seat, name: p.name, claims: mine.length, cards: mine.reduce((s, c) => s + c.count, 0), lies, biggestLie: biggest };
   });
-  st.exhibition = { handNo: st.handNo, pileSize: st.pile.length, pileOf, perSeat };
+  // 牌堆经常在局末是空的:最后那次质疑把整堆吃走了 → 所以展览必须记录「去向」
+  const eaten = st.events
+    .filter((e) => e.kind === "CHALLENGE")
+    .map((e) => ({ by: Number(e.by), against: Number(e.against), honest: Boolean(e.honest), eater: Number(e.eater), pot: Number(e.pot) }));
+  // 逐手时间线:每一手报了几张、其中几张是真的(局末才公开,用于复盘与信誉)
+  const timeline = st.claims.map((c) => ({ seat: c.seat, count: c.count, declared: c.claimedRank, honest: c.honest }));
+  st.exhibition = { handNo: st.handNo, pileSize: st.pile.length, pileOf, eaten, timeline, perSeat };
   st.events.push({ kind: "EXHIBITION", handNo: st.handNo, pileSize: st.pile.length, perSeat });
 }
 

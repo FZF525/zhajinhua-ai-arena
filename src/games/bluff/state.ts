@@ -34,7 +34,11 @@ export interface BluffClaim { seat: number; handNo: number; claimedRank: number;
 export interface BluffExhibition {
   handNo: number;
   pileSize: number;
-  pileOf: Record<number, number>;            // 牌堆里各点数实际张数
+  pileOf: Record<number, number>;            // 局末牌堆里各点数实际张数(常为空:被质疑吃走了)
+  /** 哪几次质疑、谁吃掉了多少张(牌堆「去向」)—— 牌堆空掉时就看这里 */
+  eaten: Array<{ by: number; against: number; honest: boolean; eater: number; pot: number }>;
+  /** 整局每一手的真假时间线(局末才公开,用于复盘与信誉) */
+  timeline: Array<{ seat: number; count: number; declared: number; honest: number }>;
   perSeat: Array<{ seat: number; name: string; claims: number; cards: number; lies: number; biggestLie: number }>;
 }
 
@@ -125,12 +129,25 @@ export function describeExhibition(st: BluffState): string {
   const ex = st.exhibition;
   if (!ex) return "本局没有展览";
   const lines: string[] = [];
-  lines.push("本局展览(不计分):牌堆 " + ex.pileSize + " 张");
+  const nameOf = (s: number) => st.seats[s]?.name ?? ("座位" + s);
+  lines.push("本局展览(不计分):局末牌堆 " + ex.pileSize + " 张");
   const ranks = Object.entries(ex.pileOf).map(([r, n]) => rankText(Number(r)) + "×" + n).join(" ");
-  lines.push("  牌堆真容: " + (ranks || "(空)"));
+  lines.push("  牌堆真容: " + (ranks || "(空 —— 最后那次质疑把整堆吃走了,去向见下)"));
+  if (ex.eaten.length) {
+    lines.push("  ── 牌堆去向 ──");
+    for (const c of ex.eaten) {
+      lines.push("  " + nameOf(c.by) + " 质疑 " + nameOf(c.against) + (c.honest ? ":猜错了 ✗" : ":猜对了 ✓") + " → " + nameOf(c.eater) + " 吃下 " + c.pot + " 张");
+    }
+  }
+  lines.push("  ── 这一局每个人说了什么 ──");
   for (const p of ex.perSeat) {
     lines.push("  " + p.name + ": 报了 " + p.claims + " 手 / 出 " + p.cards + " 张,其中假牌 " + p.lies +
       " 张(最大一谎 " + p.biggestLie + " 张)");
+  }
+  if (ex.timeline.length) {
+    lines.push("  ── 逐手回顾(局末才公开)──");
+    const seq = ex.timeline.map((c, i) => (i + 1) + "." + nameOf(c.seat).slice(0, 6) + "出" + c.count + "报" + rankText(c.declared) + (c.honest === c.count ? "真✓" : (c.honest === 0 ? "假✗" : "半真半假")));
+    lines.push("  " + seq.join("  "));
   }
   return lines.join(String.fromCharCode(10));
 }
