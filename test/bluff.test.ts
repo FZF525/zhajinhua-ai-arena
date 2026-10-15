@@ -429,15 +429,15 @@ test("BLUFF-18 Lynn 自进化:能决策、能读账本、一盘结束后能留�
     const r = act.type === "PLAY" ? play(st, seat, act.cardIds, act.declaredRank) : challenge(st, seat);
     assert.equal(r.ok, true, "Lynn 的动作必须合法: " + r.error);
   }
-  // 上报一盘得分:连续两次更好 → 代数增长(说明它确实在按结果进化)
-  lynn.endMatch(10);
-  lynn.endMatch(20);
-  assert.ok(lynn.generation >= 1, "表现更好时应当保留变异(代数增长),实际 " + lynn.generation);
-  assert.ok(typeof lynn.opts.challengeAt === "number" && lynn.opts.challengeAt >= 0.2 && lynn.opts.challengeAt <= 0.9, "参数必须留在合法范围");
-  // 变差 → 不应继续涨代数(回退)
+  // 进化语义:每 5 盘(一个窗口)评估一次变异
+  for (let i = 0; i < 5; i++) lynn.endMatch(10 + i);        // 第 1 个窗口,平均 12
+  assert.ok(lynn.generation >= 1, "第一个窗口后应当保留变异(代数增长),实际 " + lynn.generation);
+  for (let i = 0; i < 5; i++) lynn.endMatch(30 + i);        // 第 2 个窗口,平均 32(更好)
+  assert.ok(lynn.generation >= 2, "第二个更好的窗口后应当再进化一代,实际 " + lynn.generation);
   const genBefore = lynn.generation;
-  lynn.endMatch(-999);
-  assert.ok(lynn.generation >= genBefore, "回退不该让代数倒退");
-  assert.equal(lynn.bestScore, 20, "最好成绩要记住");
+  for (let i = 0; i < 5; i++) lynn.endMatch(-999);          // 第 3 个窗口,惨败 → 应当回退
+  assert.equal(lynn.generation, genBefore, "变差时不该继续涨代数(回退)");
+  assert.ok(typeof lynn.opts.challengeAt === "number" && lynn.opts.challengeAt >= 0.2 && lynn.opts.challengeAt <= 0.9, "参数必须留在合法范围");
+  assert.ok(lynn.bestScore >= 30, "窗口里的最好成绩要记住,实际 " + lynn.bestScore);
   assert.ok(before.challengeAt >= 0.2);
 });
