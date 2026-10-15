@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createBluffSession, bluffSeatView, bluffRunAiOne, CHALLENGE_PRESETS } from "../web/bluff-session.ts";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -75,4 +76,26 @@ test("BLUFF-WEB-01 真起服务打几手唬牌(含展览面板与切换爆牌线
   } finally {
     child.kill();
   }
+});
+test("BLUFF-WEB-02 质疑账本盘中必须藏住,只有一盘结束才揭晓", async () => {
+  const s = createBluffSession({ bust: "loose", kinds: ["Lao6", "Nizi", "Nannan", "Caocao"], drawMode: "choose3", challenge: CHALLENGE_PRESETS.standard });
+  const v0 = bluffSeatView(s, 0);
+  assert.equal(v0.challengeReveal, null, "开局时绝不能有账本");
+  assert.equal(v0.challengeRule.fee, 5, "默认预设应当是 -5");
+  assert.equal(v0.challengeRule.win, 3, "默认预设应当是 +3");
+  assert.ok(!JSON.stringify(v0).includes("challengeReveal\":{" ), "视图里不该出现账本内容");
+  // 一路打到一盘结束
+  let guard = 0;
+  while (!s.state.over && guard++ < 4000) {
+    await bluffRunAiOne(s);
+    const v = bluffSeatView(s, 0);
+    if (!s.state.over) assert.equal(v.challengeReveal, null, "盘中任何时候都不能揭晓账本(第 " + guard + " 步)");
+  }
+  assert.equal(s.state.over, true, "应当能打完一盘");
+  const vEnd = bluffSeatView(s, 0);
+  assert.ok(Array.isArray(vEnd.challengeReveal), "盘末必须揭晓质疑账本");
+  assert.equal(vEnd.challengeReveal!.length, 4, "四个座位都要有");
+  const sumBonus = vEnd.challengeReveal!.reduce((a, b) => a + b.bonus, 0);
+  assert.equal(Math.abs(sumBonus) < 0.02, true, "补分必须零和,实际 " + sumBonus);
+  assert.ok(vEnd.challengeReveal!.every((x) => typeof x.wins === "number"), "要给出猜对次数");
 });

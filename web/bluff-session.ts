@@ -45,8 +45,26 @@ export interface BluffSession {
   rng: ReturnType<typeof createRng>;
 }
 
-export function createBluffSession(bust: BluffBustMode, kinds: SeatKind[], seed?: number, drawMode: "one" | "choose3" = "one", fee = 0): BluffSession {
-  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode, challengeFee: Math.max(0, fee) };
+export interface BluffSessionOptions {
+  bust: BluffBustMode;
+  kinds: SeatKind[];
+  seed?: number;
+  drawMode?: "one" | "choose3";
+  /** 质疑规则:+win / -fee,以及藏起来的成功次数奖金(分/次) */
+  challenge?: { win: number; fee: number; winsBonus: number };
+}
+
+/** 质疑规则预设:界面上只给三个选项 ✓ */
+export const CHALLENGE_PRESETS: Record<string, { label: string; win: number; fee: number; winsBonus: number }> = {
+  off: { label: "不算质疑分(0/0)", win: 0, fee: 0, winsBonus: 0 },
+  standard: { label: "成功+3 / 失败-5,私下记账,盘末按均值偏差补分", win: 3, fee: 5, winsBonus: 30 },
+  light: { label: "成功+2 / 失败-5(同上,回报更低)", win: 2, fee: 5, winsBonus: 30 },
+};
+
+export function createBluffSession(opts: BluffSessionOptions): BluffSession {
+  const { bust, kinds, seed, drawMode = "one" } = opts;
+  const ch = opts.challenge ?? CHALLENGE_PRESETS.standard;
+  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode, challengeFee: Math.max(0, ch.fee), challengeWin: Math.max(0, ch.win), challengeWinsBonus: Math.max(0, ch.winsBonus) };
   const names = ["你", "左边", "对面", "右边"];
   const s = Math.floor((seed ?? Date.now()) % 100000);
   const state = newBluffGame(cfg, names, s);
@@ -79,6 +97,10 @@ export interface BluffSeatView {
   bustedSeat: number | null;
   lastScores: number[];
   exhibition: { text: string; lines: string[] } | null;
+  /** 当前质疑规则(常驻,便于界面显示)*/
+  challengeRule: { win: number; fee: number; winsBonus: number };
+  /** **只有一盘结束时才出现** —— 盘中绝不泄露(谁质疑得准是隐藏信息)✓ */
+  challengeReveal: { name: string; ledger: number; wins: number; bonus: number }[] | null;
   log: string[];
 }
 
@@ -112,6 +134,13 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     bustedSeat: st.bustedSeat,
     lastScores: st.lastScores,
     exhibition: ex ? { text: lines.join(String.fromCharCode(10)), lines } : null,
+    challengeRule: { win: st.cfg.challengeWin ?? 0, fee: st.cfg.challengeFee ?? 0, winsBonus: st.cfg.challengeWinsBonus ?? 0 },
+    challengeReveal: st.over
+      ? (() => {
+          const ev = [...st.events].reverse().find((x) => x.kind === "CHALLENGE_SETTLE") as { bonus: number[]; ledger: number[]; wins: number[] } | undefined;
+          return st.seats.map((p, i) => ({ name: p.name, ledger: st.challengeLedger[i], wins: st.challengeWins[i], bonus: ev && ev.bonus ? ev.bonus[i] : 0 }));
+        })()
+      : null,
     log: describeBluffLog(st, st.seats.map((p) => p.name), 16),
   };
 }

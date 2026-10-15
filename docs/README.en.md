@@ -13,7 +13,7 @@ plus a built-in **AI arena** with 10 agents and a low-noise evaluation harness.
 | | |
 | --- | --- |
 | **Rules** | 104 cards / 12 tiers / blind vs open play / compare / kick + blockade round / deferred intercept |
-| **Tests** | **163** (162 pass, 1 exhaustive test skipped by default), incl. **91,962,520-hand exhaustive enumeration** |
+| **Tests** | **164** (163 pass, 1 exhaustive test skipped by default), incl. **91,962,520-hand exhaustive enumeration** |
 | **Dependencies** | **0** — Node ≥ 22.18 runs the `.ts` files directly; no `npm install`, no build step |
 | **AI** | **10 agents**: 3 rule-based · 3 Monte-Carlo · 3 exact-equity · 1 self-play (tabular Q-learning) |
 | **Arena** | round-robin · grouped cup · 6-seat cyclic league · god-view spectating · seed-based replay (~25 KB/match, 0.5 ms/frame) |
@@ -59,7 +59,7 @@ compare rules (earliest round / blind-target protection / cost multiplier) and a
 src/         engine (cards / rng / evaluator / costs / validate / engine / state), AI, CLI
 web/         zero-dependency node:http server + static UI (hot-seat, spectating, replay bar)
 examples/    benchmarks, tournaments, probes, LLM duel, self-play training, paired evaluator
-test/        163 node:test cases (engine invariants, privacy contracts, AI behaviour, live-server smoke test, bluff rules)
+test/        164 node:test cases (engine invariants, privacy contracts, AI behaviour, live-server smoke test, bluff rules)
 docs/        llm-entry.md · add-an-ai.md · lessons.md (engineering pitfalls) · this file
 ```
 

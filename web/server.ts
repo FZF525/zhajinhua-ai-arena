@@ -22,7 +22,7 @@ import type { Recording } from "../src/replay.ts";
 import { saveReplay, listReplays, loadReplay, deleteReplay, replaysDir, pruneReplays } from "../src/store.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
 import { actorOf, buildView, viewerSeatFor } from "./view.ts";
-import { createBluffSession, bluffSeatView, bluffApply, bluffRunAiOne, parseSeatKinds } from "./bluff-session.ts";
+import { createBluffSession, bluffSeatView, bluffApply, bluffRunAiOne, parseSeatKinds, CHALLENGE_PRESETS } from "./bluff-session.ts";
 import type { BluffSession } from "./bluff-session.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -179,8 +179,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: false, error: "未知的座位类型:" + parsed.bad.join(",") + ";可选:" + ["human", "random", "Lao6", "Bajiao", "Nizi", "Nannan", "llm:glm", "llm:ds"].join("/") });
     }
     const drawMode: "one" | "choose3" = body.draw === "choose3" ? "choose3" : "one";
-    const fee = Math.max(0, Math.min(50, Number(body.fee ?? 0) || 0));
-    bluff = createBluffSession(bust, parsed.kinds, undefined, drawMode, fee);
+    const presetKey = String(body.challenge ?? "standard");
+    const preset = CHALLENGE_PRESETS[presetKey] ?? CHALLENGE_PRESETS.standard;
+    bluff = createBluffSession({ bust, kinds: parsed.kinds, drawMode, challenge: preset });
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
   }
   if (path === "/api/bluff/step" && req.method === "POST") {

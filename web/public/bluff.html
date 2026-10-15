@@ -90,8 +90,12 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
       <select id="bustSel"><option value="tight">40(火爆局)</option><option value="loose">52(技术局)</option></select>
       <label class="hint">抽点数</label>
       <select id="drawSel"><option value="one">每回合抽 1 个(难度高)</option><option value="choose3">抽 3 个我选 1 个(有主动权)</option></select>
-      <label class="hint">质疑赌注</label>
-      <select id="feeSel"><option value="0">0(无赌注)</option><option value="5">5 分(失败转给被质疑者)</option><option value="10">10 分</option></select>
+      <label class="hint">质疑规则</label>
+      <select id="chalSel">
+        <option value="standard" selected>+3/-5 私下记账(盘末揭晓)</option>
+        <option value="light">+2/-5 私下记账</option>
+        <option value="off">不算质疑分</option>
+      </select>
       <label class="hint">AI 出手速度</label>
       <select id="speedSel"><option value="900">慢(看得清)</option><option value="420" selected>中</option><option value="120">快</option><option value="0">不停顿</option></select>
       <button id="btnNew" class="primary">开新盘</button>
@@ -101,6 +105,7 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
   </section>
   <aside class="panel">
     <div style="font-weight:600;margin-bottom:6px">局末展览</div>
+    <div class="ex" id="chalReveal" style="display:none"></div>
     <div class="ex" id="ex">(打到这里会翻开牌堆真容 + 每人的谎话账本)</div>
     <div style="font-weight:600;margin:14px 0 6px">对局日志</div>
     <div class="log" id="log"></div>
@@ -180,6 +185,17 @@ function render() {
   $('btnChal').title = canAct ? (view.legal.canChallenge ? '' : '没有可质疑的上一手') : '现在轮到 ' + view.seats[view.turn].name;
   $('btnNext').style.display = view.handOver && !view.over ? 'inline-block' : 'none';
   $('ex').textContent = view.exhibition ? view.exhibition.text : '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
+  // 质疑账本:盘中一律不显示,只有一盘结束才揭晓 ✓
+  if (view.challengeReveal) {
+    var r = view.challengeRule;
+    $('chalReveal').style.display = 'block';
+    $('chalReveal').innerHTML = '<b>质疑账本揭晓</b>(规则 成功+' + r.win + '/失败-' + r.fee + ',成功次数奖金 ' + r.winsBonus + ' 分/次)<br>' +
+      view.challengeReveal.map(function (x) {
+        return '&nbsp;&nbsp;' + x.name + ': 质疑分 ' + (x.ledger >= 0 ? '+' : '') + x.ledger + ' · 猜对 ' + x.wins + ' 次 · **补分 ' + (x.bonus >= 0 ? '+' : '') + x.bonus + '**';
+      }).join('<br>');
+  } else {
+    $('chalReveal').style.display = 'none';
+  }
   $('log').innerHTML = view.log.map(function (t, i) {
     return '<div class="' + (i === view.log.length - 1 ? 'now' : '') + '">' + esc(t) + '</div>';
   }).join('');
@@ -216,12 +232,12 @@ $('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); re
 $('speedSel').onchange = function () { schedule(); };
 $('btnNew').onclick = function () {
   var kinds = ['human', $('kind1').value, $('kind2').value, $('kind3').value];
-  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, fee: Number($('feeSel').value), seats: kinds }).then(function (r) {
+  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, seats: kinds }).then(function (r) {
     if (!r.ok) { toast(r.error); return; }
     view = r.view; sel.clear(); render(); schedule();
   });
 };
-api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, fee: Number($('feeSel').value), seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
+api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
   .then(function (r) { if (r.ok) { view = r.view; render(); schedule(); } })
   .catch(function () { });
 </script>
