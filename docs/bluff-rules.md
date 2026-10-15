@@ -115,6 +115,18 @@ mean = 四人剩牌数的平均值
 | `BLUFF-13` | 两种爆牌线(40 / 52)各自生效 |
 | `BLUFF-14` | 局末牌堆不计分,只做展览 |
 
+## 十一、运行方式
+
+```bash
+node web/server.ts                    # 默认 http://127.0.0.1:8787(只绑本机)
+node web/server.ts --port=8899        # 换端口
+node web/server.ts --host=0.0.0.0      # 开放局域网:手机 / 平板各拿一台玩热座
+```
+
+* **一个进程管两个游戏**:炸金花在 `/`,唬牌在 `/bluff`;会话互不影响
+* 接口统一在 `/api/bluff/{new,state,action}`(与炸金花的 `/api/*` 同一套命名)
+* Key 只从环境变量读:`GLM_API_KEY` / `DS_API_KEY`
+
 ## 十、LLM 座位(已接入)
 
 ```bash

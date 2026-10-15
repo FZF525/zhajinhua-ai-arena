@@ -132,24 +132,24 @@ function render() {
   $('ex').textContent = view.exhibition ? view.exhibition.text : '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
   $('log').textContent = view.log.join(String.fromCharCode(10));
 }
-function refresh() { return api('/bluff/state?seat=' + seat).then(function (r) { if (r.ok) { view = r.view; render(); } }); }
+function refresh() { return api('/api/bluff/state?seat=' + seat).then(function (r) { if (r.ok) { view = r.view; render(); } }); }
 $('btnPlay').onclick = function () {
-  api('/bluff/action', { seat: seat, type: 'PLAY', cardIds: Array.from(sel) }).then(function (r) {
+  api('/api/bluff/action', { seat: seat, type: 'PLAY', cardIds: Array.from(sel) }).then(function (r) {
     if (!r.ok) toast(r.error); else { sel.clear(); view = r.view; render(); }
   });
 };
 $('btnChal').onclick = function () {
-  api('/bluff/action', { seat: seat, type: 'CHALLENGE' }).then(function (r) {
+  api('/api/bluff/action', { seat: seat, type: 'CHALLENGE' }).then(function (r) {
     if (!r.ok) toast(r.error); else { view = r.view; render(); }
   });
 };
-$('btnNext').onclick = function () { api('/bluff/action', { seat: seat, type: 'NEXT' }).then(function (r) { if (r.ok) { view = r.view; render(); } }); };
+$('btnNext').onclick = function () { api('/api/bluff/action', { seat: seat, type: 'NEXT' }).then(function (r) { if (r.ok) { view = r.view; render(); } }); };
 $('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); refresh(); };
 $('btnNew').onclick = function () {
   var kinds = ['human', $('kindSel').value, $('kindSel').value, $('kindSel').value];
-  api('/bluff/new', { bust: $('bustSel').value, seats: kinds }).then(function (r) { if (r.ok) { view = r.view; sel.clear(); render(); } });
+  api('/api/bluff/new', { bust: $('bustSel').value, seats: kinds }).then(function (r) { if (r.ok) { view = r.view; sel.clear(); render(); } });
 };
-api('/bluff/new', { bust: 'tight', seats: ['human', 'standard', 'standard', 'standard'] }).then(function (r) { if (r.ok) { view = r.view; render(); } });
+api('/api/bluff/new', { bust: 'tight', seats: ['human', 'standard', 'standard', 'standard'] }).then(function (r) { if (r.ok) { view = r.view; render(); } });
 setInterval(refresh, 1500);
 </script>
 </body>

@@ -28,6 +28,8 @@ import type { BluffSession } from "./bluff-session.ts";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(HERE, "public");
 const PORT = Number((process.argv.find((a) => a.startsWith("--port=")) ?? "--port=8787").split("=")[1]);
+// 默认只绑本机(安全);想在同一局域网的手机/平板上玩热座,就 --host=0.0.0.0
+const HOST = (process.argv.find((a) => a.startsWith("--host=")) ?? "--host=127.0.0.1").split("=")[1];
 
 let game: GameState;
 let agents: Array<Policy | null> = [];
@@ -168,20 +170,20 @@ const server = http.createServer(async (req, res) => {
   if (path === "/bluff" || path === "/bluff/") {
     return send(res, 200, readFileSync(join(PUBLIC, "bluff.html"), "utf8"), MIME[".html"]);
   }
-  if (path === "/bluff/new" && req.method === "POST") {
+  if (path === "/api/bluff/new" && req.method === "POST") {
     const body = await readBody(req);
     const bust = body.bust === "loose" ? "loose" : "tight";
     bluff = createBluffSession(bust, parseSeatKinds(body.seats));
     await bluffRunAiAsync(bluff);
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
   }
-  if (path === "/bluff/state") {
+  if (path === "/api/bluff/state") {
     if (!bluff) return sendJson(res, 200, { ok: false, error: "还没有开局" });
     await bluffRunAiAsync(bluff);
     const seat = Math.max(0, Math.min(3, Number(url.searchParams.get("seat") ?? 0)));
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
   }
-  if (path === "/bluff/action" && req.method === "POST") {
+  if (path === "/api/bluff/action" && req.method === "POST") {
     if (!bluff) return sendJson(res, 200, { ok: false, error: "还没有开局" });
     const body = await readBody(req);
     const seat = Math.max(0, Math.min(3, Number(body.seat ?? bluff.state.turn)));
@@ -293,8 +295,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log("炸金花 Web UI " + ENGINE_VERSION + ": http://127.0.0.1:" + PORT);
+server.listen(PORT, HOST, () => {
+  const shown = HOST === "0.0.0.0" ? "0.0.0.0" : HOST;
+  console.log("炸金花 Web UI " + ENGINE_VERSION + ": http://" + shown + ":" + PORT);
+  console.log("唬牌 Bluff(另一个游戏,同一进程): http://" + shown + ":" + PORT + "/bluff");
+  if (HOST === "0.0.0.0") console.log("(已开放局域网:用同网段设备的 IP:" + PORT + "/bluff 即可多人各自一台)");
+  else console.log("(只绑本机;想局域网多设备玩热座,加 --host=0.0.0.0)");
   console.log("(改过引擎/view 后必须重启本进程,浏览器刷新不会更新服务端代码)");
   console.log("对局存档目录:" + replaysDir());
   console.log("分场: 默认按人数自适应;可在页面上切换 小分场(" + TABLE_PRESETS.small.scale + "×) / 大分场(" + TABLE_PRESETS.big.scale + "×)");
