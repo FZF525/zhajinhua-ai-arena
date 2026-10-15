@@ -26,6 +26,7 @@ export function startHand(st: BluffState): void {
   for (const p of st.seats) p.hand = [];
   st.pile = [];
   st.pending = null;
+  st.claims = [];
   st.handOver = false;
   st.winnerSeat = null;
   st.bustedSeat = null;
@@ -60,10 +61,25 @@ export function settleHand(st: BluffState): number[] {
   return scores;
 }
 
+/** 局末展览:把牌堆翻出来,并给每个人结一份谎话账本(纯展示,不影响分数 ✓) */
+function buildExhibition(st: BluffState): void {
+  const pileOf: Record<number, number> = {};
+  for (const c of st.pile) { const r = rankOf(c); pileOf[r] = (pileOf[r] ?? 0) + 1; }
+  const perSeat = st.seats.map((p) => {
+    const mine = st.claims.filter((c) => c.seat === p.seat);
+    const lies = mine.reduce((s, c) => s + (c.count - c.honest), 0);
+    const biggest = mine.reduce((mx, c) => Math.max(mx, c.count - c.honest), 0);
+    return { seat: p.seat, name: p.name, claims: mine.length, cards: mine.reduce((s, c) => s + c.count, 0), lies, biggestLie: biggest };
+  });
+  st.exhibition = { handNo: st.handNo, pileSize: st.pile.length, pileOf, perSeat };
+  st.events.push({ kind: "EXHIBITION", handNo: st.handNo, pileSize: st.pile.length, perSeat });
+}
+
 function endHand(st: BluffState, winnerSeat: number | null, bustedSeat: number | null): void {
   st.handOver = true;
   st.winnerSeat = winnerSeat;
   st.bustedSeat = bustedSeat;
+  buildExhibition(st);        // 先展览,再结算(顺序不影响,但展览要看牌堆原样)
   settleHand(st);
 }
 
@@ -132,6 +148,9 @@ export function play(st: BluffState, seat: number, cardIds: string[]): BluffResu
   // 正常出牌
   for (const c of toPlay) { const i = p.hand.findIndex((x) => x.id === c.id); p.hand.splice(i, 1); }
   st.pending = { seat, cards: toPlay, declaredRank: st.roundRank };
+  // 记账:这一手里有几张是真的(局末展览 + 对手模型学习都用它)
+  const honestCount = toPlay.filter((c) => isHonestCard(c, st.roundRank, st.wildRank)).length;
+  st.claims.push({ seat, handNo: st.handNo, claimedRank: st.roundRank, count: toPlay.length, honest: honestCount });
   const ev = { kind: "PLAY", seat, count: toPlay.length, declaredRank: st.roundRank, declaredText: rankText(st.roundRank) };
   st.events.push(ev);
   st.turn = (seat + 1) % st.cfg.players;

@@ -23,6 +23,17 @@ export const DEFAULT_BLUFF_CONFIG: BluffConfig = {
 export interface BluffSeat { seat: number; name: string; hand: Card[]; points: number }
 
 /** 刚出的那一手:扣着,等下一次决策(下家出牌=并入牌堆;下家质疑=翻牌判定) */
+/** 一手的申报记录:谁、报了几张、其中几张是真的(局末展览 + AI 学习都靠它) */
+export interface BluffClaim { seat: number; handNo: number; claimedRank: number; count: number; honest: number }
+
+/** 局末展览:牌堆真容 + 每人的谎话账本 */
+export interface BluffExhibition {
+  handNo: number;
+  pileSize: number;
+  pileOf: Record<number, number>;            // 牌堆里各点数实际张数
+  perSeat: Array<{ seat: number; name: string; claims: number; cards: number; lies: number; biggestLie: number }>;
+}
+
 export interface BluffPending { seat: number; cards: Card[]; declaredRank: number }
 
 export interface BluffState {
@@ -38,6 +49,8 @@ export interface BluffState {
   handNo: number;
   matchNo: number;
   lastScores: number[];          // 上一局结算(零和)
+  claims: BluffClaim[];                       // 本局所有申报(含真假统计)
+  exhibition: BluffExhibition | null;         // 上一局的展览
   events: Array<{ kind: string } & Record<string, unknown>>;
   handOver: boolean;
   over: boolean;                 // 一盘结束
@@ -84,6 +97,8 @@ export function createBluffGame(cfg: BluffConfig, names: string[], seed: number)
     handNo: 0,
     matchNo: 1,
     lastScores: names.map(() => 0),
+    claims: [],
+    exhibition: null,
     events: [],
     handOver: false,
     over: false,

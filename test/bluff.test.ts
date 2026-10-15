@@ -207,3 +207,36 @@ test("BLUFF-10 牌堆是叠加的:没人质疑就一直涨;一旦质疑结算,�
   assert.equal(eaterAfter, eaterBefore + potBefore, "整堆(含上一手)应当归吃牌者,一张不漏");
   assert.equal(startSeat >= 0, true);
 });
+
+test("BLUFF-11 局末展览:牌堆真容 + 每人的谎话账本(纯展示,不影响分数)", () => {
+  const st = fresh(101);
+  const seat = st.turn;
+  const R = st.roundRank, W = st.wildRank;
+  // 第一手:故意全报假牌(2 张)
+  const fake = st.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, R, W)).slice(0, 2).map((c) => c.id);
+  give(st, seat, fake);
+  play(st, seat, fake);
+  // 第二手:下家把手里真牌全出(诚实)
+  const seat2 = st.turn;
+  const honest = st.seats[seat2].hand.filter((c) => isHonestCard(c, st.roundRank, st.wildRank)).slice(0, 2).map((c) => c.id);
+  give(st, seat2, honest);
+  play(st, seat2, honest);
+  // 让游戏结束(随便出到爆/空),这里直接触发展览:造一个 > 40 张的座位
+  const donor = st.seats[st.turn];
+  st.seats[(st.turn + 1) % 4].hand.push(...donor.hand.splice(0, 20));
+  play(st, st.turn, [st.seats[st.turn].hand[0].id]);
+  assert.equal(st.handOver, true, "应当结束(爆牌)");
+  const ex = st.exhibition!;
+  assert.ok(ex, "应当生成展览");
+  assert.equal(ex.handNo, 1);
+  const mine = ex.perSeat.find((x) => x.seat === seat)!;
+  assert.equal(mine.claims, 1, "该座位报了 1 手");
+  assert.equal(mine.lies, 2, "那 2 张全是假的(账本要记 2)");
+  assert.equal(mine.biggestLie, 2);
+  const his = ex.perSeat.find((x) => x.seat === seat2)!;
+  assert.equal(his.lies, 0, "诚实那一手不该记谎话");
+  assert.ok(ex.pileSize > 0, "牌堆应当有牌(展览要能看到真容)");
+  assert.ok(Object.values(ex.pileOf).reduce((a, b) => a + b, 0) === ex.pileSize, "牌堆点数统计应当等于张数");
+  // 关键:展览纯展示,不改分 —— 分数仍然零和
+  assert.equal(st.lastScores.reduce((a, b) => a + b, 0), 0);
+});

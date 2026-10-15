@@ -35,11 +35,19 @@ function runMatch(seed: number) {
   let actions = 0, challenges = 0, plays = 0, lieCards = 0, playedCards = 0;
   const piles: number[] = [];
   const ends: string[] = [];
+  const ledger: Array<{ claims: number; cards: number; lies: number; biggest: number }> = NAMES.map(() => ({ claims: 0, cards: 0, lies: 0, biggest: 0 }));
   let guard = 0;
   while (!st.over && guard++ < 200000) {
     if (st.handOver) {
       piles.push(st.pile.length);
       ends.push(st.bustedSeat === null ? "empty" : "bust");
+      // 收账:局末展览里每人的谎话账本(纯统计,不影响对局 ✓)
+      if (st.exhibition) {
+        for (const r0 of st.exhibition.perSeat) {
+          const l = ledger[r0.seat];
+          l.claims += r0.claims; l.cards += r0.cards; l.lies += r0.lies; l.biggest = Math.max(l.biggest, r0.biggestLie);
+        }
+      }
       startHand(st);
       continue;
     }
@@ -65,7 +73,7 @@ function runMatch(seed: number) {
   }
   piles.push(st.pile.length);
   ends.push(st.bustedSeat === null ? "empty" : "bust");
-  return { st, actions, challenges, plays, lieCards, playedCards, piles, ends };
+  return { st, actions, challenges, plays, lieCards, playedCards, piles, ends, ledger };
 }
 
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
@@ -73,6 +81,7 @@ const wins = [0, 0, 0, 0];
 const scores = [0, 0, 0, 0];
 let sumActions = 0, sumChal = 0, sumPlays = 0, sumLie = 0, sumCards = 0;
 const allPiles: number[] = [];
+const book = NAMES.map(() => ({ claims: 0, cards: 0, lies: 0, biggest: 0 }));
 const endCount: Record<string, number> = {};
 const t0 = Date.now();
 for (let i = 0; i < N; i++) {
@@ -80,6 +89,7 @@ for (let i = 0; i < N; i++) {
   const best = Math.max(...r.st.seats.map((p) => p.points));
   r.st.seats.forEach((p, k) => { if (p.points === best) wins[k]++; scores[k] += p.points; });
   sumActions += r.actions; sumChal += r.challenges; sumPlays += r.plays; sumLie += r.lieCards; sumCards += r.playedCards;
+  r.ledger.forEach((l, k) => { book[k].claims += l.claims; book[k].cards += l.cards; book[k].lies += l.lies; book[k].biggest = Math.max(book[k].biggest, l.biggest); });
   allPiles.push(...r.piles);
   for (const e of r.ends) endCount[e] = (endCount[e] ?? 0) + 1;
 }
@@ -92,3 +102,12 @@ console.log("  平均动作数: " + (sumActions / (N * 4)).toFixed(1) + "   其�
 console.log("  出牌总张数 " + sumCards + "  其中假牌 " + sumLie + "  →  假牌占比 " + ((sumLie / Math.max(1, sumCards)) * 100).toFixed(0) + "%");
 console.log("  局末牌堆: 平均 " + avg(allPiles).toFixed(1) + " 张,最大 " + Math.max(...allPiles) + " 张");
 console.log("  结束方式: " + JSON.stringify(endCount) + "   (empty = 出空手牌赢 / bust = 有人 > " + CFG.bustCards + " 张)");
+console.log("");
+console.log("=== 露馅榜(局末展览累计,自曝 = 谎话张数 / 出牌总张数)===");
+console.log("  座位        报了几手   出牌   假牌   自曝率   最大一谎   平均每盘得分");
+NAMES.forEach((n, k) => {
+  const b = book[k];
+  const rate = b.cards ? ((b.lies / b.cards) * 100).toFixed(0) : "0";
+  console.log("  " + n.padEnd(10) + String(b.claims).padStart(8) + String(b.cards).padStart(7) + String(b.lies).padStart(7) +
+    (rate + "%").padStart(9) + String(b.biggest).padStart(11) + (scores[k] / N).toFixed(1).padStart(14));
+});
