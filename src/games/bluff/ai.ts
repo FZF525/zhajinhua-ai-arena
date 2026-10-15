@@ -12,7 +12,7 @@
 // 风格四轴(见 presetBluffPersona):质疑门槛 / 贪心撒谎 / 谎报尺寸 / 爆牌恐惧
 // 注意:不要用 legalActions() 枚举候选动作 —— 26 选 5 约 9 万种,会拖死 AI
 import { createDeck } from "../../cards.ts";
-import { isHonestCard } from "./state.ts";
+import { isHonestCard, rankOf } from "./state.ts";
 import type { BluffState } from "./state.ts";
 import type { BluffAction } from "./legal.ts";
 import type { Rng } from "../../rng.ts";
@@ -117,20 +117,22 @@ export function excelDecide(st: BluffState, seat: number, opts: BluffAiOptions =
     if (pCheat > threshold) return { type: "CHALLENGE", seat };
   }
   // ② 出牌
-  const honest = me.hand.filter((c) => isHonestCard(c, st.roundRank, st.wildRank));
-  const junk = me.hand.filter((c) => !isHonestCard(c, st.roundRank, st.wildRank));
+  const pick = st.candidates.length > 1 ? pickBestCandidate(st, seat) : (st.candidates[0] ?? st.roundRank);
+  const honest = me.hand.filter((c) => isHonestCard(c, pick, st.wildRank));
+  const junk = me.hand.filter((c) => !isHonestCard(c, pick, st.wildRank));
   const kH = Math.min(honest.length, opts.maxHonest, st.cfg.maxPlay, me.hand.length);
   // 贪心:有一定概率放弃诚实,改成多报几张(赌对手不敢质疑)
   const wantGreed = kH > 0 && junk.length > 0 && rng ? rng.next() < opts.greed : false;
-  if (kH > 0 && !wantGreed) return { type: "PLAY", seat, cardIds: honest.slice(0, kH).map((c) => c.id) };
+  // 诚实出牌:出手里能当真的那几张(choose3 模式下 pick 就是自己挑的点数)
+  if (kH > 0 && !wantGreed) return { type: "PLAY", seat, cardIds: honest.slice(0, kH).map((c) => c.id), declaredRank: pick };
   if (kH > 0 && wantGreed) {
     const extra = Math.min(st.cfg.maxPlay - kH, junk.length, opts.maxLie);
-    if (extra > 0) return { type: "PLAY", seat, cardIds: [...honest.slice(0, kH).map((c) => c.id), ...junk.slice(0, extra).map((c) => c.id)] };
-    return { type: "PLAY", seat, cardIds: honest.slice(0, kH).map((c) => c.id) };
+    if (extra > 0) return { type: "PLAY", seat, cardIds: [...honest.slice(0, kH).map((c) => c.id), ...junk.slice(0, extra).map((c) => c.id)], declaredRank: pick };
+    return { type: "PLAY", seat, cardIds: honest.slice(0, kH).map((c) => c.id), declaredRank: pick };
   }
   const kL = Math.max(1, Math.min(opts.maxLie, st.cfg.maxPlay, junk.length || me.hand.length));
   const junkIds = (junk.length ? junk : me.hand).slice(0, kL).map((c) => c.id);
-  return { type: "PLAY", seat, cardIds: junkIds };
+  return { type: "PLAY", seat, cardIds: junkIds, declaredRank: pick };
 }
 
 /** 随机型(基线) */
@@ -191,4 +193,18 @@ export function createAdaptiveAgent(opts: BluffAiOptions = DEFAULT_EXCEL): Adapt
       return excelDecide(st, seat, opts, rng);
     },
   };
+}
+/** choose3 模式下:从候选人里挑一个「手里真牌最多」的点数(再比谁的同点数多)*/
+export function pickBestCandidate(st: BluffState, seat: number): number {
+  const hand = st.seats[seat].hand;
+  const list = st.candidates.length ? st.candidates : [st.roundRank];
+  let best = list[0];
+  let bestScore = -1;
+  for (const r of list) {
+    const honest = hand.filter((c) => isHonestCard(c, r, st.wildRank)).length;
+    const same = hand.filter((c) => rankOf(c) === r).length;
+    const score = honest * 100 + same; // 真牌数量优先,其次同点数数量
+    if (score > bestScore) { bestScore = score; best = r; }
+  }
+  return best;
 }

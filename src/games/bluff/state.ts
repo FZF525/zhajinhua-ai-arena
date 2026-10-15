@@ -14,6 +14,8 @@ export interface BluffConfig {
   bustCards: number;
   rate: number;
   handsPerMatch: number;
+  /** 抽点数方式:one = 每回合抽 1 个(现状);choose3 = 抽 3 个由出牌者选 1(把运气变成选择) */
+  drawMode?: "one" | "choose3";
 }
 
 /** 两种爆牌线(作者定的两种玩法):紧 = 40 张,松 = 52 张(= 两副手牌量)*/
@@ -49,7 +51,9 @@ export interface BluffState {
   seats: BluffSeat[];
   deck: Card[];
   wildRank: number;              // 本局癞子点数(公开;每局重抽)
-  roundRank: number;             // 本回合抽到的点数(公开;每回合重抽)
+  roundRank: number;             // 本回合的点数(公开;每回合重抽)
+  candidates: number[];          // 本回合的可选点数(choose3 模式 3 个;one 模式就是 1 个)
+
   pile: Card[];                  // 已压进牌堆的牌(内容不可见,只公开张数)
   pending: BluffPending | null;
   turn: number;

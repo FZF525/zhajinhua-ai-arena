@@ -45,8 +45,8 @@ export interface BluffSession {
   rng: ReturnType<typeof createRng>;
 }
 
-export function createBluffSession(bust: BluffBustMode, kinds: SeatKind[], seed?: number): BluffSession {
-  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4 };
+export function createBluffSession(bust: BluffBustMode, kinds: SeatKind[], seed?: number, drawMode: "one" | "choose3" = "one"): BluffSession {
+  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode };
   const names = ["你", "左边", "对面", "右边"];
   const s = Math.floor((seed ?? Date.now()) % 100000);
   const state = newBluffGame(cfg, names, s);
@@ -61,6 +61,8 @@ export interface BluffSeatView {
   you: number;
   wildText: string;
   roundText: string;
+  candidates: Array<{ rank: number; text: string; mineHonest: number }>;
+  drawMode: string;
   wildRank: number;
   roundRank: number;
   pileCount: number;
@@ -91,6 +93,8 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     you: seat,
     wildText: rankText(st.wildRank),
     roundText: rankText(st.roundRank),
+    candidates: (st.candidates.length ? st.candidates : [st.roundRank]).map((r) => ({ rank: r, text: rankText(r), mineHonest: st.seats[seat].hand.filter((c) => isHonestCard(c, r, st.wildRank)).length })),
+    drawMode: st.cfg.drawMode ?? "one",
     wildRank: st.wildRank,
     roundRank: st.roundRank,
     pileCount: st.pile.length,

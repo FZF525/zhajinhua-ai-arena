@@ -7,7 +7,7 @@ import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, BLUFF_BUST_MODES, createBluffGame, cardCount, rankOf, isHonestCard, describeExhibition } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand } from "../src/games/bluff/rules.ts";
-import { createAdaptiveAgent, DEFAULT_EXCEL } from "../src/games/bluff/ai.ts";
+import { createAdaptiveAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
 
 const NAMES = ["A", "B", "C", "D"];
 function fresh(seed = 7): BluffState {
@@ -378,4 +378,39 @@ test("BLUFF-15 展览要能解释「牌堆为什么是空的」:给出牌堆去�
   assert.ok(text.includes("吃走") && text.includes("空"), "牌堆为空时要解释原因: " + text.split(String.fromCharCode(10))[1]);
   assert.ok(text.includes("牌堆去向"), "要列出牌堆去向");
   assert.ok(text.includes("逐手回顾"), "要列出逐手回顾");
+});
+
+test("BLUFF-16 choose3 模式:抽 3 个候选、由出牌者选 1、非候选的点数一律拒绝", () => {
+  const cfg = { ...DEFAULT_BLUFF_CONFIG, drawMode: "choose3" as const };
+  const st = newBluffGame(cfg, NAMES, 501);
+  assert.equal(st.candidates.length, 3, "应当抽出 3 个候选点数");
+  assert.equal(new Set(st.candidates).size, 3, "候选不能重复");
+  assert.ok(!st.candidates.includes(st.wildRank), "候选不能包含癞子点数");
+  assert.equal(st.roundRank, st.candidates[0], "默认点数取第一个候选");
+  // 用候选里的第 3 个点数宣告 → 应当被接受
+  const seat = st.turn;
+  const want = st.candidates[2];   // 注意:出牌后候选会重抽,所以要先记下来
+  const r = play(st, seat, [st.seats[seat].hand[0].id], want);
+  assert.equal(r.ok, true, "候选内的点数应当能报: " + r.error);
+  assert.equal(st.pending!.declaredRank, want, "pending 要记住出牌当时宣告的点数(而不是新抽到的候选)");
+  // 非候选的点数 → 拒绝
+  const other = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].find((x) => !st.candidates.includes(x) && x !== st.wildRank)!;
+  const seat2 = st.turn;
+  const r2 = play(st, seat2, [st.seats[seat2].hand[0].id], other);
+  assert.equal(r2.ok, false, "非候选点数必须被拒绝");
+  assert.equal(r2.error, "declaredRankNotInCandidates");
+});
+
+test("BLUFF-17 pickBestCandidate 会挑「手里真牌最多」的那个候选", () => {
+  const cfg = { ...DEFAULT_BLUFF_CONFIG, drawMode: "choose3" as const };
+  const st = newBluffGame(cfg, NAMES, 601);
+  const seat = st.turn;
+  // 让候选人里第一个成为"手里真牌最多"的:把手里所有该点数的牌都换给他
+  const target = st.candidates[0];
+  const ids = st.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, target, st.wildRank)).slice(0, 0).map((c) => c.id);
+  assert.equal(ids.length, 0);
+  const best = pickBestCandidate(st, seat);
+  const counts = st.candidates.map((r) => ({ r, n: st.seats[seat].hand.filter((c) => isHonestCard(c, r, st.wildRank)).length }));
+  const maxN = Math.max(...counts.map((x) => x.n));
+  assert.equal(counts.find((x) => x.r === best)!.n, maxN, "应当挑真牌最多的候选: " + JSON.stringify(counts));
 });

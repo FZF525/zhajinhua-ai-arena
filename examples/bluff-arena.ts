@@ -29,7 +29,7 @@ const LEARN_ALPHA = Number((process.argv.find((x) => x.startsWith("--alpha=")) ?
 const ADAPTIVE = (process.argv.find((x) => x.startsWith("--adaptive=")) ?? "--adaptive=0").split("=")[1] === "1";
 // 自适应 agent 每盘新建(建在 runMatch 里)—— 跨盘复用会串数据、学到非平稳分布
 // 可调:爆牌线 / 手牌数(手牌数 × 4 不能超过 104)
-const CFG = { ...DEFAULT_BLUFF_CONFIG, bustCards: flag("bust", DEFAULT_BLUFF_CONFIG.bustCards), handSize: flag("hand", DEFAULT_BLUFF_CONFIG.handSize) };
+const CFG = { ...DEFAULT_BLUFF_CONFIG, bustCards: flag("bust", DEFAULT_BLUFF_CONFIG.bustCards), handSize: flag("hand", DEFAULT_BLUFF_CONFIG.handSize), drawMode: ((process.argv.find((x) => x.startsWith("--draw=")) ?? "--draw=one").split("=")[1] === "choose3" ? "choose3" : "one") as "one" | "choose3" };
 const NAMES = MODE === "excel4" ? ["EX0", "EX1", "EX2", "EX3"] : ["EXCEL", "R1", "R2", "R3"];
 
 function runMatch(seed: number) {
@@ -68,7 +68,7 @@ function runMatch(seed: number) {
     if (act.type === "PLAY") {
       plays++;
       playedCards += act.cardIds.length;
-      const R = st.roundRank, W = st.wildRank;
+      const R = act.declaredRank ?? st.roundRank, W = st.wildRank;
       for (const id of act.cardIds) {
         const c = st.seats[seat].hand.find((x) => x.id === id)!;
         if (!isHonestCard(c, R, W)) lieCards++;      // 用模块自己的判定,别再手搓一份(已因此错过一次)
@@ -101,7 +101,7 @@ for (let i = 0; i < N; i++) {
   allPiles.push(...r.piles);
   for (const e of r.ends) endCount[e] = (endCount[e] ?? 0) + 1;
 }
-console.log("=== 唬牌擂台: " + MODE + "   " + N + " 盘(每盘 4 局),质疑门槛 " + CHALLENGE_AT + ",用时 " + ((Date.now() - t0) / 1000).toFixed(1) + "s ===");
+console.log("=== 唬牌擂台: " + MODE + "   " + N + " 盘(每盘 4 局),质疑门槛 " + CHALLENGE_AT + ",爆牌线 " + CFG.bustCards + ",抽点数 " + (CFG.drawMode ?? "one") + ",用时 " + ((Date.now() - t0) / 1000).toFixed(1) + "s ===");
 console.log("  夺冠次数: " + NAMES.map((n, k) => n + "=" + wins[k] + "(" + ((wins[k] / N) * 100).toFixed(0) + "%)").join("  "));
 console.log("  平均每盘得分: " + NAMES.map((n, k) => n + "=" + (scores[k] / N).toFixed(1)).join("  ") + "   (零和)");
 console.log("");

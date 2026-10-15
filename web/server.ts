@@ -178,7 +178,8 @@ const server = http.createServer(async (req, res) => {
       // 说清楚哪里错了,而不是悄悄换个默认值(否则前端只会看到"没反应")
       return sendJson(res, 200, { ok: false, error: "未知的座位类型:" + parsed.bad.join(",") + ";可选:" + ["human", "random", "Lao6", "Bajiao", "Nizi", "Nannan", "llm:glm", "llm:ds"].join("/") });
     }
-    bluff = createBluffSession(bust, parsed.kinds);
+    const drawMode: "one" | "choose3" = body.draw === "choose3" ? "choose3" : "one";
+    bluff = createBluffSession(bust, parsed.kinds, undefined, drawMode);
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
   }
   if (path === "/api/bluff/step" && req.method === "POST") {

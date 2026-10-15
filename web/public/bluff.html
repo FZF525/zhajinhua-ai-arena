@@ -18,6 +18,8 @@ main { display:grid; grid-template-columns: 1fr 320px; gap:16px; padding:16px; a
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
 .turnbar { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
 .turnbar .who { font-size:19px; font-weight:600; }
+.cand { padding:4px 10px; margin-right:6px; font-size:13px; }
+.cand.on { background:var(--gold); color:#191307; border-color:var(--gold); font-weight:700; }
 .banner { background:#0d1219; border:1px solid var(--line); border-left:3px solid var(--gold); border-radius:8px; padding:9px 13px; margin-bottom:12px; font-size:15px; }
 .seats { display:flex; gap:10px; flex-wrap:wrap; }
 .seat { border:1px solid var(--line); border-radius:10px; padding:8px 12px; min-width:120px; }
@@ -63,6 +65,10 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
     </div>
     <div class="banner" id="banner">-</div>
     <div class="seats" id="seats"></div>
+    <div class="row" id="candRow" style="display:none">
+      <span class="hint">本回合点数(选一个报):</span>
+      <span id="cands"></span>
+    </div>
     <div class="hand" id="hand"></div>
     <div class="btns">
       <button class="primary" id="btnPlay" disabled>出牌(选中的几张)</button>
@@ -82,6 +88,8 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
     <div class="row">
       <label class="hint">爆牌线</label>
       <select id="bustSel"><option value="tight">40(火爆局)</option><option value="loose">52(技术局)</option></select>
+      <label class="hint">抽点数</label>
+      <select id="drawSel"><option value="one">每回合抽 1 个(难度高)</option><option value="choose3">抽 3 个我选 1 个(有主动权)</option></select>
       <label class="hint">AI 出手速度</label>
       <select id="speedSel"><option value="900">慢(看得清)</option><option value="420" selected>中</option><option value="120">快</option><option value="0">不停顿</option></select>
       <button id="btnNew" class="primary">开新盘</button>
@@ -98,7 +106,7 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
 </main>
 <div id="toast"></div>
 <script>
-var view = null, sel = new Set(), seat = 0, busy = false, timer = null;
+var view = null, sel = new Set(), seat = 0, busy = false, timer = null, picked = null;
 function $(id) { return document.getElementById(id); }
 function toast(msg) { var t = $('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2600); }
 function esc(s) { return String(s).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }); }
@@ -136,9 +144,21 @@ function render() {
       render();
     };
   });
+  var cand = view.candidates || [];
+  $('candRow').style.display = cand.length > 1 ? 'flex' : 'none';
+  if (cand.length > 1) {
+    if (!cand.some(function (c) { return c.rank === picked; })) picked = cand[0].rank;
+    $('cands').innerHTML = cand.map(function (c) {
+      return '<button class="cand ' + (c.rank === picked ? 'on' : '') + '" data-rank="' + c.rank + '">' + c.text + '(我有 ' + c.mineHonest + ' 张真的)</button>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('.cand'), function (b) {
+      b.onclick = function () { picked = Number(b.getAttribute('data-rank')); render(); };
+    });
+  }
   var canAct = mine && !view.handOver && !view.over;
   $('btnPlay').disabled = !canAct || sel.size < 1;
-  $('btnPlay').textContent = '出牌(' + sel.size + ' 张,报全是 ' + view.roundText + ')';
+  var showRank = (cand.length > 1 && picked !== null) ? (cand.filter(function (c) { return c.rank === picked; })[0] || {}).text : view.roundText;
+  $('btnPlay').textContent = '出牌(' + sel.size + ' 张,报全是 ' + showRank + ')';
   $('btnChal').disabled = !canAct || !view.legal.canChallenge;
   $('btnNext').style.display = view.handOver && !view.over ? 'inline-block' : 'none';
   $('ex').textContent = view.exhibition ? view.exhibition.text : '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
@@ -162,7 +182,7 @@ async function tick() {
 function schedule() { clearTimeout(timer); var d = Number($('speedSel').value); timer = setTimeout(tick, isFinite(d) ? d : 400); }
 function refreshOnce() { return api('/api/bluff/state?seat=' + seat).then(function (r) { if (r.ok) { view = r.view; render(); } }); }
 $('btnPlay').onclick = function () {
-  api('/api/bluff/action', { seat: seat, type: 'PLAY', cardIds: Array.from(sel) }).then(function (r) {
+  api('/api/bluff/action', { seat: seat, type: 'PLAY', cardIds: Array.from(sel), declaredRank: picked }).then(function (r) {
     if (!r.ok) { toast(r.error); return; }
     sel.clear(); view = r.view; render(); schedule();
   });
@@ -178,12 +198,12 @@ $('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); re
 $('speedSel').onchange = function () { schedule(); };
 $('btnNew').onclick = function () {
   var kinds = ['human', $('kind1').value, $('kind2').value, $('kind3').value];
-  api('/api/bluff/new', { bust: $('bustSel').value, seats: kinds }).then(function (r) {
+  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, seats: kinds }).then(function (r) {
     if (!r.ok) { toast(r.error); return; }
     view = r.view; sel.clear(); render(); schedule();
   });
 };
-api('/api/bluff/new', { bust: 'tight', seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
+api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
   .then(function (r) { if (r.ok) { view = r.view; render(); schedule(); } })
   .catch(function () { });
 </script>

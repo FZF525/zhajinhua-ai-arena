@@ -14,10 +14,15 @@ function shuffle<T>(arr: T[], rng: Rng): T[] {
   return a;
 }
 
-/** 抽一个非癞子点数(每回合重抽,公开) */
+/** 抽本回合候选点数(每回合重抽,公开):one = 1 个;choose3 = 3 个,由出牌者选 1 个 */
 function drawRoundRank(st: BluffState): number {
-  const ranks = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].filter((r) => r !== st.wildRank);
-  return ranks[Math.floor(st.rng.next() * ranks.length)];
+  const pool = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].filter((r) => r !== st.wildRank);
+  const want = st.cfg.drawMode === "choose3" ? 3 : 1;
+  const picked: number[] = [];
+  const rest = pool.slice();
+  for (let i = 0; i < want && rest.length; i++) picked.push(rest.splice(Math.floor(st.rng.next() * rest.length), 1)[0]);
+  st.candidates = picked;
+  return picked[0];
 }
 /** 开新一局:洗牌、发牌、抽癞子(每局重抽)、庄家轮换并先手、抽本回合点数 */
 export function startHand(st: BluffState): void {
@@ -132,11 +137,14 @@ function combinations(cards: Card[], k: number): Card[][] {
 /** 出牌:扣 1~maxPlay 张,宣告都是 roundRank;不能过牌。
  * 注意顺序:先结算“上一手活了下来”(= 上家没被质疑)→ 若上家因此出空,他赢;
  * 这也是“最后一手可以被质疑”的实现:质疑窗口 = 下家的这一手。 */
-export function play(st: BluffState, seat: number, cardIds: string[]): BluffResult {
+export function play(st: BluffState, seat: number, cardIds: string[], declaredRank?: number): BluffResult {
   if (st.handOver) return { ok: false, error: "handOver" };
   if (seat !== st.turn) return { ok: false, error: "notTurn" };
   if (!cardIds.length) return { ok: false, error: "mustPlayAtLeastOne" };
   if (cardIds.length > st.cfg.maxPlay) return { ok: false, error: "tooManyCards" };
+  // 宣告的点数必须来自本回合候选(choose3 模式下就是「从 3 个里选 1 个」)
+  const declared = declaredRank ?? st.roundRank;
+  if (!st.candidates.includes(declared)) return { ok: false, error: "declaredRankNotInCandidates" };
   const p = st.seats[seat];
   const toPlay: Card[] = [];
   for (const id of cardIds) {
@@ -153,11 +161,11 @@ export function play(st: BluffState, seat: number, cardIds: string[]): BluffResu
   }
   // 正常出牌
   for (const c of toPlay) { const i = p.hand.findIndex((x) => x.id === c.id); p.hand.splice(i, 1); }
-  st.pending = { seat, cards: toPlay, declaredRank: st.roundRank };
+  st.pending = { seat, cards: toPlay, declaredRank: declared };
   // 记账:这一手里有几张是真的(局末展览 + 对手模型学习都用它)
-  const honestCount = toPlay.filter((c) => isHonestCard(c, st.roundRank, st.wildRank)).length;
-  st.claims.push({ seat, handNo: st.handNo, claimedRank: st.roundRank, count: toPlay.length, honest: honestCount });
-  const ev = { kind: "PLAY", seat, count: toPlay.length, declaredRank: st.roundRank, declaredText: rankText(st.roundRank) };
+  const honestCount = toPlay.filter((c) => isHonestCard(c, declared, st.wildRank)).length;
+  st.claims.push({ seat, handNo: st.handNo, claimedRank: declared, count: toPlay.length, honest: honestCount });
+  const ev = { kind: "PLAY", seat, count: toPlay.length, declaredRank: declared, declaredText: rankText(declared) };
   st.events.push(ev);
   st.turn = (seat + 1) % st.cfg.players;
   st.roundRank = drawRoundRank(st);
@@ -186,7 +194,7 @@ export function challenge(st: BluffState, seat: number): BluffResult {
 }
 
 export function applyBluff(st: BluffState, action: BluffAction): BluffResult {
-  if (action.type === "PLAY") return play(st, action.seat, action.cardIds);
+  if (action.type === "PLAY") return play(st, action.seat, action.cardIds, action.declaredRank);
   if (action.type === "CHALLENGE") return challenge(st, action.seat);
   return { ok: false, error: "unknownAction" };
 }
