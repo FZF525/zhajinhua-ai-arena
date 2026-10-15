@@ -30,6 +30,14 @@ export const BLUFF_SYSTEM = [
   "只输出 JSON:action 取 PLAY 或 CHALLENGE,cards 是卡牌 id 数组,reason 是一句话。",
 ].join("\n");
 
+/** 纠错段:针对实测中 GLM 的经典谬误(用自己的手牌去推断别人撒谎) */
+export const BLUFF_SYSTEM_CORRECTION = [
+  "【重要纠正】判断别人有没有撒谎,只允许依据这三样:",
+  "① 他报的张数;② 他的历史撒谎率(见对手画像);③ 场上还剩下几张真牌。",
+  "**你自己手里有没有某个点数,与他手里有没有完全无关** —— 你自己的手牌不能证明他在撒谎。",
+  "反过来:历史撒谎率低的人更可能在说真话,不该因为他报了 4 张就去质疑他。",
+].join("\n");
+
 /** 把牌桌讲给模型听(含对手画像) */
 export function buildBluffPrompt(st: BluffState, seat: number, agent?: AdaptiveAgent): string {
   const me = st.seats[seat];
@@ -91,7 +99,7 @@ export function fallbackAction(st: BluffState, seat: number): BluffAction {
 export interface BluffLlmInfo { ok: boolean; error?: string; reason?: string; ms: number; inputTokens: number; outputTokens: number; usedFallback?: boolean; calls: number }
 
 /** 造一个 LLM 座位;decide 是异步的(web 路由本身就是 async) */
-export function makeBluffLlmAgent(provider: "glm" | "ds", agent?: AdaptiveAgent, temperature?: number) {
+export function makeBluffLlmAgent(provider: "glm" | "ds", agent?: AdaptiveAgent, temperature?: number, useCorrection = false) {
   const cfg: RemoteConfig = { ...BLUFF_LLM_PROVIDERS[provider], ...(temperature === undefined ? {} : { temperature }) };
   const info: BluffLlmInfo = { ok: false, ms: 0, inputTokens: 0, outputTokens: 0, calls: 0 };
   return {
@@ -99,7 +107,8 @@ export function makeBluffLlmAgent(provider: "glm" | "ds", agent?: AdaptiveAgent,
     get info(): BluffLlmInfo { return { ...info }; },
     async decide(st: BluffState, seat: number): Promise<BluffAction> {
       info.calls += 1;
-      const r = await remoteChat(cfg, BLUFF_SYSTEM, buildBluffPrompt(st, seat, agent));
+      const system = useCorrection ? BLUFF_SYSTEM + "\n\n" + BLUFF_SYSTEM_CORRECTION : BLUFF_SYSTEM;
+      const r = await remoteChat(cfg, system, buildBluffPrompt(st, seat, agent));
       info.ok = r.ok; info.error = r.error; info.ms = r.ms; info.inputTokens = r.inputTokens; info.outputTokens = r.outputTokens;
       const parsed = r.ok ? parseBluffAction(r.text, st, seat) : null;
       info.usedFallback = !parsed;
