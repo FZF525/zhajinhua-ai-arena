@@ -8,7 +8,7 @@ import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, isHonestCard } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge } from "../src/games/bluff/rules.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
-import { excelDecide, randomDecide, DEFAULT_EXCEL } from "../src/games/bluff/ai.ts";
+import { excelDecide, randomDecide, DEFAULT_EXCEL, BLUFF_PERSONAS } from "../src/games/bluff/ai.ts";
 import type { BluffAiOptions } from "../src/games/bluff/ai.ts";
 
 const N = Number(process.argv[2] ?? 60);
@@ -19,6 +19,12 @@ const flag = (name: string, dflt: number) => {
 };
 const CHALLENGE_AT = flag("challenge", DEFAULT_EXCEL.challengeAt);
 const OPTS: BluffAiOptions = { ...DEFAULT_EXCEL, challengeAt: CHALLENGE_AT };
+// 性格模式:--personas=honest,standard,gambler,standard  (座位 0..3;random- 前缀 = 随机型)
+const PERSONA_SPEC = (process.argv.find((x) => x.startsWith("--personas=")) ?? "").split("=")[1] ?? "";
+const SEAT_KIND: Array<"random" | keyof typeof BLUFF_PERSONAS> = PERSONA_SPEC
+  ? (PERSONA_SPEC.split(",").map((x) => x.trim()) as Array<"random" | keyof typeof BLUFF_PERSONAS>)
+  : [];
+const optsFor = (seat: number): BluffAiOptions => (SEAT_KIND[seat] && SEAT_KIND[seat] !== "random" ? BLUFF_PERSONAS[SEAT_KIND[seat]] : OPTS);
 // 可调:爆牌线 / 手牌数(手牌数 × 4 不能超过 104)
 const CFG = { ...DEFAULT_BLUFF_CONFIG, bustCards: flag("bust", DEFAULT_BLUFF_CONFIG.bustCards), handSize: flag("hand", DEFAULT_BLUFF_CONFIG.handSize) };
 const NAMES = MODE === "excel4" ? ["EX0", "EX1", "EX2", "EX3"] : ["EXCEL", "R1", "R2", "R3"];
@@ -38,7 +44,11 @@ function runMatch(seed: number) {
       continue;
     }
     const seat = st.turn;
-    const act = MODE === "excel4" ? excelDecide(st, seat, OPTS) : (seat === 0 ? excelDecide(st, seat, OPTS) : randomDecide(st, seat, rng));
+    const kind = SEAT_KIND[seat];
+    const act = kind === "random" ? randomDecide(st, seat, rng)
+      : kind ? excelDecide(st, seat, BLUFF_PERSONAS[kind], rng)
+      : MODE === "excel4" ? excelDecide(st, seat, OPTS, rng)
+      : (seat === 0 ? excelDecide(st, seat, OPTS, rng) : randomDecide(st, seat, rng));
     if (act.type === "PLAY") {
       plays++;
       playedCards += act.cardIds.length;
