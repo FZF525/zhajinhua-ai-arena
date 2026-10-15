@@ -30,6 +30,8 @@ export interface BluffAiOptions {
   bustFear: number;
   /** 对手模型:认为对手「没真牌时会谎报几张」 */
   oppBluffSize: number;
+  /** 学习强度:结构模型与实测账本的融合权重(越大越信结构模型)。默认 6 */
+  learnAlpha?: number;
 }
 
 export const DEFAULT_EXCEL: BluffAiOptions = {
@@ -136,4 +138,53 @@ export function randomDecide(st: BluffState, seat: number, rng: Rng): BluffActio
   const ids: string[] = [];
   for (let i = 0; i < k && pool.length; i++) ids.push(pool.splice(Math.floor(rng.next() * pool.length), 1)[0].id);
   return { type: "PLAY", seat, cardIds: ids };
+}
+// ============ 自适应:用「局末展览」的账本学每个对手的真实撒谎率 ============
+//
+// 动机:结构模型假设「对手能诚实就诚实」→ 于是它认为报 k 张几乎必真 → 从不质疑 ✗
+// 而一个 64% 谎话率的赌徒正好吃这个假设(实测 100% 夺冠 ✗)
+// 修法:把「每个对手 × 每个申报张数」的真假计数记下来,用 Beta-Binomial 与结构模型融合:
+//   pCheat = (实测谎话数 + α × 结构先验) / (实测申报数 + α)
+// α 越大越信结构模型;观测越多越信数据 ✓
+export interface AdaptiveAgent {
+  opts: BluffAiOptions;
+  decide(st: BluffState, seat: number, rng?: Rng): BluffAction;
+  /** 局末:把展览里每个对手的每手申报真假记进统计(记自己也无所谓,不会质疑自己) */
+  observeHand(st: BluffState): void;
+  /** 调试/测试用:看某对手某个张数的统计 */
+  statsFor(seat: number, k: number): { claims: number; lies: number };
+}
+
+export function createAdaptiveAgent(opts: BluffAiOptions = DEFAULT_EXCEL): AdaptiveAgent {
+  const stats: Array<Map<number, { claims: number; lies: number }>> = [];
+  const alpha = Math.max(1, opts.learnAlpha ?? 6);
+  return {
+    opts,
+    statsFor(seat: number, k: number) {
+      return stats[seat]?.get(k) ?? { claims: 0, lies: 0 };
+    },
+    observeHand(st: BluffState) {
+      for (const c of st.claims) {
+        stats[c.seat] = stats[c.seat] ?? new Map();
+        const e = stats[c.seat].get(c.count) ?? { claims: 0, lies: 0 };
+        e.claims += 1;
+        if (c.honest < c.count) e.lies += 1;
+        stats[c.seat].set(c.count, e);
+      }
+    },
+    decide(st: BluffState, seat: number, rng?: Rng): BluffAction {
+      const me = st.seats[seat];
+      if (st.pending && st.pending.seat !== seat) {
+        const k = st.pending.cards.length;
+        const prior = cheatProbability(st, seat, k, opts);          // 结构模型
+        const s = stats[st.pending.seat]?.get(k) ?? { claims: 0, lies: 0 };
+        const pCheat = (s.lies + alpha * prior) / (s.claims + alpha); // Beta-Binomial 融合
+        const pot = st.pile.length + k;
+        const willBust = me.hand.length + pot > st.cfg.bustCards;
+        const threshold = opts.challengeAt * (willBust ? opts.bustFear : 1.0);
+        if (pCheat > threshold) return { type: "CHALLENGE", seat };
+      }
+      return excelDecide(st, seat, opts, rng);
+    },
+  };
 }

@@ -8,7 +8,7 @@ import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, isHonestCard } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge } from "../src/games/bluff/rules.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
-import { excelDecide, randomDecide, DEFAULT_EXCEL, BLUFF_PERSONAS } from "../src/games/bluff/ai.ts";
+import { excelDecide, randomDecide, DEFAULT_EXCEL, BLUFF_PERSONAS, createAdaptiveAgent } from "../src/games/bluff/ai.ts";
 import type { BluffAiOptions } from "../src/games/bluff/ai.ts";
 
 const N = Number(process.argv[2] ?? 60);
@@ -24,13 +24,19 @@ const PERSONA_SPEC = (process.argv.find((x) => x.startsWith("--personas=")) ?? "
 const SEAT_KIND: Array<"random" | keyof typeof BLUFF_PERSONAS> = PERSONA_SPEC
   ? (PERSONA_SPEC.split(",").map((x) => x.trim()) as Array<"random" | keyof typeof BLUFF_PERSONAS>)
   : [];
-const optsFor = (seat: number): BluffAiOptions => (SEAT_KIND[seat] && SEAT_KIND[seat] !== "random" ? BLUFF_PERSONAS[SEAT_KIND[seat]] : OPTS);
+const CHALLENGE_OVERRIDE = process.argv.find((x) => x.startsWith("--challenge=")) ? Number(process.argv.find((x) => x.startsWith("--challenge="))!.split("=")[1]) : null;
+const LEARN_ALPHA = Number((process.argv.find((x) => x.startsWith("--alpha=")) ?? "--alpha=6").split("=")[1]);
+const ADAPTIVE = (process.argv.find((x) => x.startsWith("--adaptive=")) ?? "--adaptive=0").split("=")[1] === "1";
+// 自适应 agent 每盘新建(建在 runMatch 里)—— 跨盘复用会串数据、学到非平稳分布
 // 可调:爆牌线 / 手牌数(手牌数 × 4 不能超过 104)
 const CFG = { ...DEFAULT_BLUFF_CONFIG, bustCards: flag("bust", DEFAULT_BLUFF_CONFIG.bustCards), handSize: flag("hand", DEFAULT_BLUFF_CONFIG.handSize) };
 const NAMES = MODE === "excel4" ? ["EX0", "EX1", "EX2", "EX3"] : ["EXCEL", "R1", "R2", "R3"];
 
 function runMatch(seed: number) {
   const st: BluffState = newBluffGame(CFG, NAMES, seed);
+  // 自适应 agent 必须每盘新建:它们要学的是「本盘对手」的撒谎习惯
+  const base = (seat: number): BluffAiOptions => (SEAT_KIND[seat] && SEAT_KIND[seat] !== "random" ? BLUFF_PERSONAS[SEAT_KIND[seat]] : OPTS);
+  const agents = [0, 1, 2, 3].map((seat) => createAdaptiveAgent({ ...base(seat), learnAlpha: LEARN_ALPHA, challengeAt: CHALLENGE_OVERRIDE ?? base(seat).challengeAt }));
   const rng = createRng(seed * 31 + 7);
   let actions = 0, challenges = 0, plays = 0, lieCards = 0, playedCards = 0;
   const piles: number[] = [];
@@ -39,6 +45,7 @@ function runMatch(seed: number) {
   let guard = 0;
   while (!st.over && guard++ < 200000) {
     if (st.handOver) {
+      if (ADAPTIVE) for (const ag of agents) ag.observeHand(st);   // 局末展览 → 记账(必须在 startHand 之前,claims 会被清空)
       piles.push(st.pile.length);
       ends.push(st.bustedSeat === null ? "empty" : "bust");
       // 收账:局末展览里每人的谎话账本(纯统计,不影响对局 ✓)
@@ -54,7 +61,8 @@ function runMatch(seed: number) {
     const seat = st.turn;
     const kind = SEAT_KIND[seat];
     const act = kind === "random" ? randomDecide(st, seat, rng)
-      : kind ? excelDecide(st, seat, BLUFF_PERSONAS[kind], rng)
+      : ADAPTIVE ? agents[seat].decide(st, seat, rng)
+      : kind ? excelDecide(st, seat, { ...BLUFF_PERSONAS[kind], challengeAt: CHALLENGE_OVERRIDE ?? BLUFF_PERSONAS[kind].challengeAt }, rng)
       : MODE === "excel4" ? excelDecide(st, seat, OPTS, rng)
       : (seat === 0 ? excelDecide(st, seat, OPTS, rng) : randomDecide(st, seat, rng));
     if (act.type === "PLAY") {

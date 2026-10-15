@@ -7,6 +7,7 @@ import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, createBluffGame, cardCount, rankOf, isHonestCard } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand } from "../src/games/bluff/rules.ts";
+import { createAdaptiveAgent, DEFAULT_EXCEL } from "../src/games/bluff/ai.ts";
 
 const NAMES = ["A", "B", "C", "D"];
 function fresh(seed = 7): BluffState {
@@ -239,4 +240,38 @@ test("BLUFF-11 局末展览:牌堆真容 + 每人的谎话账本(纯展示,不�
   assert.ok(Object.values(ex.pileOf).reduce((a, b) => a + b, 0) === ex.pileSize, "牌堆点数统计应当等于张数");
   // 关键:展览纯展示,不改分 —— 分数仍然零和
   assert.equal(st.lastScores.reduce((a, b) => a + b, 0), 0);
+});
+
+test("BLUFF-12 自适应对手模型:看到谎话后要记账,而且学会质疑被证明过的骗子", () => {
+  const st = fresh(202);
+  const agent = createAdaptiveAgent({ ...DEFAULT_EXCEL, learnAlpha: 4 });
+  const seat = 0;
+  // 造一批观测:座位 1 报了 3 次 5 张,全是假话(直接塞进 claims,模拟展览账本)
+  for (let i = 0; i < 3; i++) st.claims.push({ seat: 1, handNo: 1, claimedRank: st.roundRank, count: 5, honest: 0 });
+  // 座位 2 报了 3 次 5 张,全是真的
+  for (let i = 0; i < 3; i++) st.claims.push({ seat: 2, handNo: 1, claimedRank: st.roundRank, count: 5, honest: 5 });
+  agent.observeHand(st);
+  assert.deepEqual(agent.statsFor(1, 5), { claims: 3, lies: 3 }, "骗子的账要记对");
+  assert.deepEqual(agent.statsFor(2, 5), { claims: 3, lies: 0 }, "诚实者的账也要记对");
+
+  // 面对座位 1 报 5 张(结构模型认为这种几乎必真 ✓)→ 自适应后应当质疑(因为实测 100% 是假)
+  const fake = fresh(203);
+  const agent2 = createAdaptiveAgent({ ...DEFAULT_EXCEL, learnAlpha: 2 });
+  for (let i = 0; i < 6; i++) fake.claims.push({ seat: 1, handNo: 1, claimedRank: fake.roundRank, count: 5, honest: 0 });
+  agent2.observeHand(fake);
+  const turn = fake.turn;
+  // 让座位 1 出一手 5 张,轮到别人来决定是否质疑
+  const p1 = fake.seats[1];
+  const ids = p1.hand.slice(0, 5).map((c) => c.id);
+  // 保证轮到 1(不行就顺推)
+  let guard = 0;
+  while (fake.turn !== 1 && guard++ < 8) { const s2 = fake.turn; const q = fake.seats[s2]; play(fake, s2, [q.hand[0].id]); }
+  if (fake.turn === 1 && !fake.handOver) {
+    play(fake, 1, ids);
+    const chalSeat = fake.turn;
+    if (chalSeat === 0) {
+      const act = agent2.decide(fake, 0);
+      assert.equal(act.type, "CHALLENGE", "对 100% 撒谎的对手,报了 5 张就该抓");
+    }
+  }
 });
