@@ -44,6 +44,7 @@ const wins: Record<string, number> = {};
 const seatSum = [0, 0, 0, 0];
 let lieCards = 0, playedCards = 0, challenges = 0, hands = 0, gen = 0;
 const endTypes: Record<string, number> = {};
+const chalByName: Record<string, number> = {};   // 按人统计质疑次数(看清谁在出手)
 
 for (let m = 0; m < N; m++) {
   // 座位轮换:把名单整体转 m 格 → 每个人在四个座位上都坐同样多
@@ -69,7 +70,7 @@ for (let m = 0; m < N; m++) {
     const before = st.claims.length;
     const r = act.type === "PLAY" ? play(st, act.seat, act.cardIds, act.declaredRank) : challenge(st, act.seat);
     if (!r.ok) throw new Error("非法动作:" + r.error);
-    if (act.type === "CHALLENGE") challenges += 1;
+    if (act.type === "CHALLENGE") { challenges += 1; chalByName[names[seat]] = (chalByName[names[seat]] ?? 0) + 1; }
     if (st.claims.length > before) {
       const c = st.claims[before];
       playedCards += c.count;
@@ -124,4 +125,5 @@ if (TRACE && traceRows.length) {
   console.log("    最终:第 " + last[1] + " 代 → challengeAt=" + Number(last[2]).toFixed(2) + " greed=" + Number(last[3]).toFixed(2) + " maxLie=" + last[4] + " maxHonest=" + last[5] + " bustFear=" + Number(last[6]).toFixed(2));
   console.log("    (起点是标准型:challengeAt 0.55 / greed 0.10 / maxLie 2 / maxHonest 5 / bustFear 1.60)");
 }
+console.log("  各人质疑次数: " + Object.entries(chalByName).map(([n, c]) => n + "=" + (c / Math.max(1, N * 4)).toFixed(1) + "/局").join("  "));
 console.log("  节奏:平均 " + (hands ? "每局" : "") + (challenges / Math.max(1, hands)).toFixed(1) + " 次质疑/局;假牌率 " + (playedCards ? ((lieCards / playedCards) * 100).toFixed(0) : "0") + "%;结束方式 " + JSON.stringify(endTypes));

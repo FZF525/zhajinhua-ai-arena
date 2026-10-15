@@ -11,6 +11,18 @@ import { describeBluffEvent, describeBluffLog } from "../src/games/bluff/format.
 import { rankText } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
 import { createRng } from "../src/rng.ts";
+import { readFileSync, existsSync } from "node:fs";
+
+// 密钥只从文件读,**绝不写进命令行**(教训:后台任务的命令会被回显 → 密钥就泄露了)
+function loadKeysFromFile(path = "D:/Desktop/测试/glm-key.txt"): void {
+  if (!existsSync(path)) return;
+  const txt = readFileSync(path, "utf8");
+  const g = txt.match(/[0-9a-f]{32}\.[A-Za-z0-9]{16}/);
+  const d = txt.match(/sk-[A-Za-z0-9]{20,}/);
+  if (g && !process.env.GLM_API_KEY) process.env.GLM_API_KEY = g[0];
+  if (d && !process.env.DS_API_KEY) process.env.DS_API_KEY = d[0];
+}
+loadKeysFromFile();
 
 const arg = (name: string, dflt: string) => {
   const hit = process.argv.find((x) => x.startsWith("--" + name + "="));
