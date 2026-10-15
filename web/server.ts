@@ -22,6 +22,8 @@ import type { Recording } from "../src/replay.ts";
 import { saveReplay, listReplays, loadReplay, deleteReplay, replaysDir, pruneReplays } from "../src/store.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
 import { actorOf, buildView, viewerSeatFor } from "./view.ts";
+import { createBluffSession, bluffSeatView, bluffApply, bluffRunAi, parseSeatKinds } from "./bluff-session.ts";
+import type { BluffSession } from "./bluff-session.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(HERE, "public");
@@ -138,7 +140,13 @@ function stepOnce(): { ok: boolean; reason?: string; acted?: number; events?: st
   return { ok: true, acted: actor, events: game.events.slice(before).map(describeEvent) };
 }
 
+let bluff: BluffSession | null = null;
+
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
+
+function sendJson(res: http.ServerResponse, code: number, obj: unknown): void {
+  send(res, code, JSON.stringify(obj));
+}
 
 function send(res: http.ServerResponse, code: number, body: string, type = "application/json; charset=utf-8"): void {
   res.writeHead(code, { "content-type": type, "cache-control": "no-store" });
@@ -155,6 +163,40 @@ async function readBody(req: http.IncomingMessage): Promise<any> {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const path = url.pathname;
+
+  // ---- 唬牌(与炸金花的 /api/* 完全分开,互不影响)----
+  if (path === "/bluff" || path === "/bluff/") {
+    return send(res, 200, readFileSync(join(PUBLIC, "bluff.html"), "utf8"), MIME[".html"]);
+  }
+  if (path === "/bluff/new" && req.method === "POST") {
+    const body = await readBody(req);
+    const bust = body.bust === "loose" ? "loose" : "tight";
+    bluff = createBluffSession(bust, parseSeatKinds(body.seats));
+    bluffRunAi(bluff);
+    return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
+  }
+  if (path === "/bluff/state") {
+    if (!bluff) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    bluffRunAi(bluff);
+    const seat = Math.max(0, Math.min(3, Number(url.searchParams.get("seat") ?? 0)));
+    return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
+  }
+  if (path === "/bluff/action" && req.method === "POST") {
+    if (!bluff) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    const body = await readBody(req);
+    const seat = Math.max(0, Math.min(3, Number(body.seat ?? bluff.state.turn)));
+    if (bluff.state.handOver) {
+      bluffApply(bluff, seat, { type: "PLAY", seat, cardIds: [] });
+    } else {
+      const action = body.type === "CHALLENGE"
+        ? { type: "CHALLENGE" as const, seat }
+        : { type: "PLAY" as const, seat, cardIds: Array.isArray(body.cardIds) ? body.cardIds.map(String) : [] };
+      const r = bluffApply(bluff, seat, action);
+      if (!r.ok) return sendJson(res, 200, { ok: false, error: r.error });
+    }
+    bluffRunAi(bluff);
+    return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
+  }
 
   try {
     if (path === "/api/new" && req.method === "POST") {

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>唬牌 Bluff · 热座</title>
+<style>
+:root { --bg:#10141c; --panel:#181e29; --line:#2a3444; --fg:#e6ecf5; --dim:#8b9bb4; --gold:#d8a657; --bad:#e06c75; --good:#98c379; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+header { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:12px 18px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; }
+h1 { font-size:17px; margin:0 10px 0 0; color:var(--gold); }
+.badge { padding:2px 9px; border:1px solid var(--line); border-radius:999px; color:var(--dim); font-size:13px; }
+.badge b { color:var(--fg); }
+main { display:grid; grid-template-columns: 1fr 320px; gap:16px; padding:16px; align-items:start; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+.turnbar { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.turnbar .who { font-size:19px; font-weight:600; }
+.seats { display:flex; gap:10px; flex-wrap:wrap; }
+.seat { border:1px solid var(--line); border-radius:10px; padding:8px 12px; min-width:120px; }
+.seat.active { border-color:var(--gold); box-shadow:0 0 0 2px rgba(216,166,87,.18); }
+.seat .n { font-weight:600; }
+.seat .c { color:var(--dim); font-size:13px; }
+.hand { display:flex; flex-wrap:wrap; gap:6px; margin:14px 0; }
+.card { width:46px; height:60px; border-radius:8px; border:1px solid var(--line); background:#0d1219; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; user-select:none; font-weight:600; }
+.card.honest { border-color:#3f6a44; background:#122016; }
+.card.sel { outline:2px solid var(--gold); transform:translateY(-4px); }
+.card small { color:var(--dim); font-weight:400; font-size:11px; }
+.btns { display:flex; gap:10px; flex-wrap:wrap; }
+button { background:#222c3c; color:var(--fg); border:1px solid var(--line); border-radius:9px; padding:9px 16px; font-size:15px; cursor:pointer; }
+button.primary { background:var(--gold); color:#191307; border-color:var(--gold); font-weight:700; }
+button.danger { border-color:var(--bad); color:var(--bad); }
+button:disabled { opacity:.4; cursor:default; }
+.log { max-height:300px; overflow:auto; font:12px/1.7 ui-monospace,Consolas,monospace; color:var(--dim); white-space:pre-wrap; }
+.ex { white-space:pre-wrap; font:13px/1.8 ui-monospace,Consolas,monospace; color:#cfd8e3; }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:6px 8px; }
+.hint { color:var(--dim); font-size:13px; }
+#toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); background:#2b1d1d; border:1px solid var(--bad); color:#f0c9c9; padding:9px 18px; border-radius:9px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>唬牌 Bluff</h1>
+  <span class="badge">第 <b id="handNo">-</b> 局 / 第 <b id="matchNo">-</b> 盘</span>
+  <span class="badge">癞子 <b id="wild">-</b></span>
+  <span class="badge">本回合点数 <b id="rank">-</b></span>
+  <span class="badge">牌堆 <b id="pile">0</b> 张</span>
+  <span class="badge" id="bustMode">-</span>
+</header>
+<main>
+  <section class="panel">
+    <div class="turnbar">
+      <span class="who" id="turnWho">-</span>
+      <span class="hint" id="turnHint"></span>
+    </div>
+    <div class="seats" id="seats"></div>
+    <div class="hand" id="hand"></div>
+    <div class="btns">
+      <button class="primary" id="btnPlay" disabled>出牌(选中的几张)</button>
+      <button class="danger" id="btnChal" disabled>质疑上一手</button>
+      <button id="btnNext" style="display:none">下一局</button>
+    </div>
+    <div class="row">
+      <label class="hint">当前玩家座位:</label>
+      <select id="seatSel"><option value="0">0 · 你</option><option value="1">1 · 左边</option><option value="2">2 · 对面</option><option value="3">3 · 右边</option></select>
+      <label class="hint" style="margin-left:auto">爆牌线:</label>
+      <select id="bustSel"><option value="tight">40(火爆局)</option><option value="loose">52(技术局)</option></select>
+      <label class="hint">你对家:</label>
+      <select id="kindSel">
+        <option value="standard">标准 AI</option>
+        <option value="gambler">赌徒 AI</option>
+        <option value="honest">老实人 AI</option>
+        <option value="random">随机</option>
+      </select>
+      <button id="btnNew">开新盘</button>
+    </div>
+    <div class="hint">提示:选中牌后点「出牌」= 宣告这几张都是本回合点数(可以撒谎 ✓);癞子可当任意点数 ✓</div>
+  </section>
+  <aside class="panel">
+    <div style="font-weight:600;margin-bottom:6px">局末展览</div>
+    <div class="ex" id="ex">(打到这里会翻开牌堆真容 + 每人的谎话账本)</div>
+    <div style="font-weight:600;margin:14px 0 6px">对局日志</div>
+    <div class="log" id="log"></div>
+  </aside>
+</main>
+<div id="toast"></div>
+<script>
+var view = null, sel = new Set(), seat = 0;
+function $(id) { return document.getElementById(id); }
+function toast(msg) { var t = $('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2200); }
+function api(path, body) {
+  return fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined)
+    .then(function (r) { return r.json(); });
+}
+function render() {
+  if (!view) return;
+  $('handNo').textContent = view.handNo; $('matchNo').textContent = view.matchNo;
+  $('wild').textContent = view.wildText; $('rank').textContent = view.roundText;
+  $('pile').textContent = view.pileCount;
+  $('bustMode').textContent = $('bustSel').value === 'loose' ? '爆牌线 52' : '爆牌线 40';
+  var who = view.seats[view.turn];
+  $('turnWho').textContent = (view.turn === seat ? '轮到你' : '轮到 ' + who.name) + (view.pending ? '(' + who.name + ' 刚报了 ' + view.pending.count + ' 张)' : '');
+  $('turnHint').textContent = view.handOver ? '本局结束' : '手牌 ' + view.seats[seat].cards + ' 张';
+  $('seats').innerHTML = view.seats.map(function (s) {
+    return '<div class="seat ' + (s.seat === view.turn ? 'active' : '') + '"><div class="n">' + s.name + '</div>' +
+      '<div class="c">' + s.cards + ' 张 · ' + s.points + ' 分</div><div class="c">' + s.kind + '</div></div>';
+  }).join('');
+  $('hand').innerHTML = view.hand.map(function (c, i) {
+    return '<div class="card ' + (c.honest ? 'honest' : '') + (sel.has(c.id) ? ' sel' : '') + '" data-id="' + c.id + '">' +
+      (c.honest ? '★' : '') + '<div>' + c.text + '</div><small>' + c.suit.slice(0, 2) + '</small></div>';
+  }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('.card'), function (el) {
+    el.onclick = function () {
+      var id = el.getAttribute('data-id');
+      if (sel.has(id)) sel.delete(id); else { if (sel.size < view.legal.maxPlay) sel.add(id); else toast('最多出 ' + view.legal.maxPlay + ' 张'); }
+      render();
+    };
+  });
+  var myTurn = view.turn === seat && !view.handOver && !view.over;
+  $('btnPlay').disabled = !myTurn || sel.size < 1;
+  $('btnPlay').textContent = '出牌(' + sel.size + ' 张报 ' + view.roundText + ')';
+  $('btnChal').disabled = !myTurn || !view.legal.canChallenge;
+  $('btnNext').style.display = view.handOver && !view.over ? 'inline-block' : 'none';
+  $('ex').textContent = view.exhibition ? view.exhibition.text : '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
+  $('log').textContent = view.log.join(String.fromCharCode(10));
+}
+function refresh() { return api('/bluff/state?seat=' + seat).then(function (r) { if (r.ok) { view = r.view; render(); } }); }
+$('btnPlay').onclick = function () {
+  api('/bluff/action', { seat: seat, type: 'PLAY', cardIds: Array.from(sel) }).then(function (r) {
+    if (!r.ok) toast(r.error); else { sel.clear(); view = r.view; render(); }
+  });
+};
+$('btnChal').onclick = function () {
+  api('/bluff/action', { seat: seat, type: 'CHALLENGE' }).then(function (r) {
+    if (!r.ok) toast(r.error); else { view = r.view; render(); }
+  });
+};
+$('btnNext').onclick = function () { api('/bluff/action', { seat: seat, type: 'NEXT' }).then(function (r) { if (r.ok) { view = r.view; render(); } }); };
+$('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); refresh(); };
+$('btnNew').onclick = function () {
+  var kinds = ['human', $('kindSel').value, $('kindSel').value, $('kindSel').value];
+  api('/bluff/new', { bust: $('bustSel').value, seats: kinds }).then(function (r) { if (r.ok) { view = r.view; sel.clear(); render(); } });
+};
+api('/bluff/new', { bust: 'tight', seats: ['human', 'standard', 'standard', 'standard'] }).then(function (r) { if (r.ok) { view = r.view; render(); } });
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>
