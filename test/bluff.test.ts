@@ -6,13 +6,11 @@ import type { Card } from "../src/cards.ts";
 import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, createBluffGame, cardCount, rankOf, isHonestCard } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
-import { startHand, play, challenge, legalActions, checkBluffInvariants, settleHand } from "../src/games/bluff/rules.ts";
+import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand } from "../src/games/bluff/rules.ts";
 
 const NAMES = ["A", "B", "C", "D"];
 function fresh(seed = 7): BluffState {
-  const st = createBluffGame(DEFAULT_BLUFF_CONFIG, NAMES, seed);
-  startHand(st);
-  return st;
+  return newBluffGame(DEFAULT_BLUFF_CONFIG, NAMES, seed);   // 工厂自带发牌,别再手动 startHand(会多打一局)
 }
 
 /** 安全换手牌:把指定 id 的牌换到某座位(总量不变,不会重复) */
@@ -160,12 +158,12 @@ test("BLUFF-08 结算零和:四人得分相加为 0", () => {
 });
 
 test("BLUFF-09 完整对局:随机策略能打完一盘 4 局,全程不变量成立", () => {
-  const st = createBluffGame(DEFAULT_BLUFF_CONFIG, NAMES, 31);
+  const st = newBluffGame(DEFAULT_BLUFF_CONFIG, NAMES, 31);
   const rng = createRng(99);
   let guard = 0;
   while (!st.over && guard++ < 20000) {
     if (st.over) break;
-    if (st.handNo === 0 || st.handOver) { startHand(st); continue; }   // 手牌还没发 / 上一局结束
+    if (st.handOver) { startHand(st); continue; }   // 上一局结束,开下一局
     const acts = legalActions(st);
     assert.ok(acts.length > 0, "总得有动作");
     const a = acts[Math.floor(rng.next() * acts.length)];
@@ -177,4 +175,35 @@ test("BLUFF-09 完整对局:随机策略能打完一盘 4 局,全程不变量成
   assert.ok(st.over, "应当能打完一盘(4 局)");
   assert.equal(st.handNo, 4, "一盘 = 4 局");
   assert.equal(st.seats.reduce((s, p) => s + p.points, 0), 0, "一盘下来总分仍零和");
+});
+test("BLUFF-10 牌堆是叠加的:没人质疑就一直涨;一旦质疑结算,整堆被吃走并清零", () => {
+  const st = fresh(41);
+  const startSeat = st.turn;
+  // 连续四家各出 2 张,全程不质疑 → 牌堆应逐手变大
+  let expectPile = 0;
+  for (let i = 0; i < 4; i++) {
+    const seat = st.turn;
+    const p = st.seats[seat];
+    const ids = p.hand.slice(0, 2).map((c) => c.id);
+    const before = st.pile.length;
+    play(st, seat, ids);
+    // 刚出的那手在 pending 里;上一手(如果有)已并入 pile
+    if (i > 0) {
+      assert.equal(st.pile.length, before + 2, "上一手应当并入牌堆(叠加)");
+    }
+    expectPile = st.pile.length;
+  }
+  assert.ok(expectPile >= 4, "牌堆应当已经涨到 4 张以上,实际 " + expectPile);
+  assert.equal(st.pile.length + (st.pending ? st.pending.cards.length : 0), st.pile.length + 2, "最后一手仍在待判定区");
+
+  // 下家质疑 → 整堆(含待判定的那一手)被吃走,牌堆清零
+  const challenger = st.turn;
+  const eaterBefore = st.seats[challenger].hand.length + st.seats[(challenger + 3) % 4].hand.length;
+  const potBefore = st.pile.length + st.pending!.cards.length;
+  challenge(st, challenger);
+  assert.equal(st.pile.length, 0, "质疑结算后牌堆必须清零");
+  assert.equal(st.pending, null, "待判定区也要清空");
+  const eaterAfter = st.seats[challenger].hand.length + st.seats[(challenger + 3) % 4].hand.length;
+  assert.equal(eaterAfter, eaterBefore + potBefore, "整堆(含上一手)应当归吃牌者,一张不漏");
+  assert.equal(startSeat >= 0, true);
 });

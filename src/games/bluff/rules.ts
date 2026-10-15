@@ -3,7 +3,7 @@ import { createDeck } from "../../cards.ts";
 import type { Card } from "../../cards.ts";
 import type { Rng } from "../../rng.ts";
 import type { BluffAction } from "./legal.ts";
-import { cardCount, isHonestCard, rankOf, rankText } from "./state.ts";
+import { cardCount, createBluffGame, isHonestCard, rankOf, rankText } from "./state.ts";
 import type { BluffState } from "./state.ts";
 
 export interface BluffResult { ok: boolean; error?: string; events?: Array<{ kind: string } & Record<string, unknown>> }
@@ -76,6 +76,14 @@ function checkEnd(st: BluffState): void {
     const empty = st.seats.find((p) => p.hand.length === 0);
     if (empty) endHand(st, empty.seat, null);
   }
+}
+
+/** 建一局并直接发好牌 —— 请优先用它:createBluffGame 只是构造,忘了发牌会得到一个“全员 0 张”的死状态
+ * (这个坑在实现里踩了两次:测试循环和擂台脚本都忘了调用 startHand) */
+export function newBluffGame(cfg: Parameters<typeof createBluffGame>[0], names: string[], seed: number): BluffState {
+  const st = createBluffGame(cfg, names, seed);
+  startHand(st);
+  return st;
 }
 
 export function legalActions(st: BluffState): BluffAction[] {

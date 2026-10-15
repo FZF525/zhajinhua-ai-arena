@@ -67,6 +67,8 @@ export function isHonestCard(c: Card, declaredRank: number, wildRank: number): b
   return r === declaredRank || r === wildRank;
 }
 
+/** 只构造,不自动发牌 —— 忘了紧接着调 startHand 会得到“全员 0 张”的死状态;
+ * 绝大多数场景请用 rules.ts 的 newBluffGame(它替你发好牌) */
 export function createBluffGame(cfg: BluffConfig, names: string[], seed: number): BluffState {
   if (names.length !== cfg.players) throw new Error("座位数与配置不符");
   const st: BluffState = {
