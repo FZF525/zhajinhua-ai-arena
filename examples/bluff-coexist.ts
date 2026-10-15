@@ -8,7 +8,8 @@ import { BLUFF_PERSONAS, createAdaptiveAgent } from "../src/games/bluff/ai.ts";
 import { createRng } from "../src/rng.ts";
 
 const M = Number(process.argv[2] ?? "150");
-const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES.loose, rate: 1, handsPerMatch: 4, drawMode: "choose3" as const, challengeFee: 5, challengeWin: 3, challengeWinsBonus: 30 };
+const LEDGER = (process.argv.find((x) => x.startsWith("--ledger=")) ?? "--ledger=full").split("=")[1] === "revealed" ? "revealed" as const : "full" as const;
+const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES.loose, rate: 1, handsPerMatch: 4, drawMode: "choose3" as const, challengeFee: 5, challengeWin: 3, challengeWinsBonus: 30, ledgerMode: LEDGER };
 const ROSTER = ["Lao6", "Bajiao", "Nizi", "Nannan", "Xiaozhen", "Caocao"] as const;
 // 四种桌子:P + 三个搭档
 const TABLES: Array<{ tag: string; others: string[] }> = [
@@ -38,7 +39,7 @@ function runOne(p: string, others: string[], m: number): number {
   return me;
 }
 
-console.log("=== 「谁能和谁共存」:同一性格放进四种桌子(每种 " + M + " 盘,座位轮换)===");
+console.log("=== 「谁能和谁共存」 · 账本模式 = " + LEDGER + " · 每种桌子 " + M + " 盘 ===");
 console.log("  表内 = 该性格在那种桌子上的平均每盘得分");
 console.log("");
 const w = 13;

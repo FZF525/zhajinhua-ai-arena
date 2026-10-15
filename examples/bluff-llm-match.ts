@@ -20,8 +20,9 @@ const KINDS = arg("seats", "llm:ds,Lao6,Nizi,llm:glm").split(",").map((s) => s.t
 const HANDS = Number(arg("hands", "4"));
 const DRAW = arg("draw", "choose3") === "one" ? "one" as const : "choose3" as const;
 const BUST = arg("bust", "52") === "loose" || arg("bust", "52") === "52" ? BLUFF_BUST_MODES.loose : BLUFF_BUST_MODES.tight;
-const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BUST, rate: 1, handsPerMatch: HANDS, drawMode: DRAW };
-const NAMES = ["DS", "Lao6", "Nizi", "GLM"];
+const CFG = { players: 4, handSize: 26, maxPlay: 5, bustCards: BUST, rate: 1, handsPerMatch: HANDS, drawMode: DRAW, challengeFee: 5, challengeWin: 3, challengeWinsBonus: 30 };
+// 座位名跟着 --seats 走(之前硬编码 → 换成曹操时会显示成 Lao6,把自己都骗了 ✗)
+const NAMES = KINDS.map((k, i) => (k.startsWith("llm:") ? k.slice(4).toUpperCase() : k + i));
 
 const st: BluffState = newBluffGame(CFG, NAMES, Number(arg("seed", "20260126")));
 const rng = createRng(7);

@@ -184,7 +184,10 @@ export function createAdaptiveAgent(opts: BluffAiOptions = DEFAULT_EXCEL): Adapt
       return stats[seat]?.get(k) ?? { claims: 0, lies: 0 };
     },
     observeHand(st: BluffState) {
+      const revealedMode = (st.cfg.ledgerMode ?? "full") === "revealed";
       for (const c of st.claims) {
+        // revealed 模式:没被翻过的谎话不进账本 → 学不到 → 撒谎更安全 ✓
+        if (revealedMode && !c.revealed) continue;
         stats[c.seat] = stats[c.seat] ?? new Map();
         const e = stats[c.seat].get(c.count) ?? { claims: 0, lies: 0 };
         e.claims += 1;

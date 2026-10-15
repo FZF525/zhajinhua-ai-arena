@@ -583,3 +583,31 @@ test("BLUFF-23 阵容名单:六位性格齐全,Caocao 是数据发现的那组�
   assert.equal(c.maxHonest, 5, "敢出满 5 张");
   assert.ok(c.bustFear < BLUFF_PERSONAS.Nannan.bustFear, "且比囡囡不怕爆");
 });
+
+test("BLUFF-24 账本透明度:revealed 模式只记「被质疑翻过」的那几手", () => {
+  const base = { ...DEFAULT_BLUFF_CONFIG, drawMode: "one" as const };
+  // full(默认):没被质疑的手也进时间线
+  const full = newBluffGame({ ...base, ledgerMode: "full" }, NAMES, 1101);
+  for (let i = 0; i < 3; i++) { const q = full.seats[full.turn]; play(full, full.turn, [q.hand[0].id]); }
+  challenge(full, full.turn);
+  assert.equal(full.exhibition, null, "还没结束,不该有展览");
+  // 造一个结束,看时间线
+  const seat = full.turn;
+  let need = 42 - full.seats[seat].hand.length;
+  for (const p of full.seats) { if (p.seat === seat || need <= 0) continue; const take = Math.min(need, Math.max(0, p.hand.length - 1)); full.seats[seat].hand.push(...p.hand.splice(0, take)); need -= take; }
+  play(full, seat, [full.seats[seat].hand[0].id]);
+  const fullClaims = full.claims.length;
+  const fullTimeline = full.exhibition!.timeline.length;
+  assert.equal(fullTimeline, fullClaims, "full 模式:每一手都要进时间线");
+
+  // revealed 模式:只有被翻过的那几手进时间线
+  const rev = newBluffGame({ ...base, ledgerMode: "revealed" as const }, NAMES, 1102);
+  for (let i = 0; i < 3; i++) { const q = rev.seats[rev.turn]; play(rev, rev.turn, [q.hand[0].id]); }
+  challenge(rev, rev.turn);                        // 只翻最后一手
+  const seat2 = rev.turn;
+  let need2 = 42 - rev.seats[seat2].hand.length;
+  for (const p of rev.seats) { if (p.seat === seat2 || need2 <= 0) continue; const take = Math.min(need2, Math.max(0, p.hand.length - 1)); rev.seats[seat2].hand.push(...p.hand.splice(0, take)); need2 -= take; }
+  play(rev, seat2, [rev.seats[seat2].hand[0].id]);
+  assert.ok(rev.claims.length > rev.exhibition!.timeline.length, "revealed 模式:时间线必须少于申报总数(" + rev.exhibition!.timeline.length + " < " + rev.claims.length + ")");
+  assert.ok(rev.exhibition!.timeline.every((c) => c.revealed), "时间线里的每一手都应当是被翻过的");
+});

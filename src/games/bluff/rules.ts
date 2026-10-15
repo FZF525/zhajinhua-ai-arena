@@ -120,7 +120,10 @@ function buildExhibition(st: BluffState): void {
     .filter((e) => e.kind === "CHALLENGE")
     .map((e) => ({ by: Number(e.by), against: Number(e.against), honest: Boolean(e.honest), eater: Number(e.eater), pot: Number(e.pot) }));
   // 逐手时间线:每一手报了几张、其中几张是真的(局末才公开,用于复盘与信誉)
-  const timeline = st.claims.map((c) => ({ seat: c.seat, count: c.count, declared: c.claimedRank, honest: c.honest }));
+  const mode = st.cfg.ledgerMode ?? "full";
+  const timeline = st.claims
+    .filter((c) => mode === "full" || c.revealed)
+    .map((c) => ({ seat: c.seat, count: c.count, declared: c.claimedRank, honest: c.honest, revealed: Boolean(c.revealed) }));
   st.exhibition = { handNo: st.handNo, pileSize: st.pile.length, pileOf, eaten, timeline, perSeat };
   st.events.push({ kind: "EXHIBITION", handNo: st.handNo, pileSize: st.pile.length, perSeat });
 }
@@ -219,6 +222,9 @@ export function challenge(st: BluffState, seat: number): BluffResult {
   const pend = st.pending;
   const honest = pend.cards.every((c) => isHonestCard(c, pend.declaredRank, st.wildRank));
   const eater = honest ? seat : pend.seat;
+  // 被质疑 = 被翻过 → 这一手留下记录(revealed 模式下的学习信号只剩这些)
+  const lastClaim = st.claims[st.claims.length - 1];
+  if (lastClaim && lastClaim.seat === pend.seat) lastClaim.revealed = true;
   const pot = st.pile.concat(pend.cards);
   st.seats[eater].hand.push(...pot);
   st.pile = [];

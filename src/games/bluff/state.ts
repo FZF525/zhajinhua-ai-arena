@@ -24,6 +24,9 @@ export interface BluffConfig {
   challengeSettle?: "immediate" | "hidden";
   /** 藏起来的「质疑成功次数」在盘末按均值偏差折算多少分/次(0 = 不算这笔)。默认 0 */
   challengeWinsBonus?: number;
+  /** 账本透明度:full = 局末把每一手真假都记账(现状);revealed = **只记被质疑翻过的那几手**
+   *  后者让"没被抓到的谎话"永远是谜 → 撒谎的收益回升 ✓ */
+  ledgerMode?: "full" | "revealed";
 }
 
 /** 两种爆牌线(作者定的两种玩法):紧 = 40 张,松 = 52 张(= 两副手牌量)*/
@@ -38,7 +41,7 @@ export interface BluffSeat { seat: number; name: string; hand: Card[]; points: n
 
 /** 刚出的那一手:扣着,等下一次决策(下家出牌=并入牌堆;下家质疑=翻牌判定) */
 /** 一手的申报记录:谁、报了几张、其中几张是真的(局末展览 + AI 学习都靠它) */
-export interface BluffClaim { seat: number; handNo: number; claimedRank: number; count: number; honest: number }
+export interface BluffClaim { seat: number; handNo: number; claimedRank: number; count: number; honest: number; revealed?: boolean }
 
 /** 局末展览:牌堆真容 + 每人的谎话账本 */
 export interface BluffExhibition {
