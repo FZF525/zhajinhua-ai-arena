@@ -20,6 +20,16 @@ main { display:grid; grid-template-columns: 1fr 320px; gap:16px; padding:16px; a
 .turnbar .who { font-size:19px; font-weight:600; }
 .cand { padding:4px 10px; margin-right:6px; font-size:13px; }
 .cand.on { background:var(--gold); color:#191307; border-color:var(--gold); font-weight:700; }
+.chip { display:inline-block; padding:1px 7px; margin:2px; border:1px solid var(--line); border-radius:6px; font-size:12px; color:#c8d3e0; }
+.chip.ok { border-color:#3f6a44; color:#a8d5a8; }
+.chip.bad { border-color:#6a3f3f; color:#e2a3a3; }
+.exhead { font-weight:600; margin-bottom:4px; }
+.exsub { margin:9px 0 3px; color:var(--dim); font-size:12px; }
+.exrow { font-size:13px; line-height:1.7; }
+.extable { border-collapse:collapse; margin-top:6px; font-size:13px; }
+.extable th, .extable td { border:1px solid var(--line); padding:2px 8px; text-align:center; }
+.good { color:#98c379; }
+.bad { color:#e06c75; }
 .banner { background:#0d1219; border:1px solid var(--line); border-left:3px solid var(--gold); border-radius:8px; padding:9px 13px; margin-bottom:12px; font-size:15px; }
 .seats { display:flex; gap:10px; flex-wrap:wrap; }
 .seat { border:1px solid var(--line); border-radius:10px; padding:8px 12px; min-width:120px; }
@@ -197,15 +207,42 @@ function render() {
   $('btnPlay').title = canAct ? '' : (view.over ? '一盘已结束' : view.handOver ? '本局已结束' : '现在轮到 ' + view.seats[view.turn].name + '(座位 ' + view.turn + '),还没到你');
   $('btnChal').title = canAct ? (view.legal.canChallenge ? '' : '没有可质疑的上一手') : '现在轮到 ' + view.seats[view.turn].name;
   $('btnNext').style.display = view.handOver && !view.over ? 'inline-block' : 'none';
-  $('ex').textContent = view.exhibition ? view.exhibition.text : '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
+  // 局末展览:结构化卡片(而不是一坨文本)
+  var ex = view.exhibitionData;
+  if (ex) {
+    var parts = [];
+    parts.push('<div class="exhead">局末牌堆 ' + ex.pileSize + ' 张' + (ex.pileSize === 0 ? '(被最后那次质疑吃走了)' : '') + '</div>');
+    if (ex.pileOf.length) parts.push('<div>' + ex.pileOf.map(function (c) { return '<span class="chip">' + c.text + ' x' + c.count + '</span>'; }).join('') + '</div>');
+    if (ex.eaten.length) {
+      parts.push('<div class="exsub">牌堆去向</div>');
+      ex.eaten.forEach(function (c) {
+        parts.push('<div class="exrow">' + c.by + ' 质疑 ' + c.against + (c.honest ? ':猜错 ✗' : ':猜对 ✓') + ' → ' + c.eater + ' 吃下 ' + c.pot + ' 张</div>');
+      });
+    }
+    parts.push('<div class="exsub">每人账本</div>');
+    ex.perSeat.forEach(function (p) {
+      parts.push('<div class="exrow"><b>' + p.name + '</b> 报 ' + p.claims + ' 手 · 出 ' + p.cards + ' 张 · <span class="bad">假 ' + p.lies + ' 张</span> · 最大一谎 ' + p.biggestLie +
+        (p.bluffs ? ' · <span class="good">骗过全场 ' + p.bluffs + ' 次</span>' : '') + '</div>');
+    });
+    if (ex.timeline.length) {
+      parts.push('<div class="exsub">逐手回顾(只列被翻过的)</div>');
+      parts.push('<div>' + ex.timeline.map(function (c, i) {
+        return '<span class="chip ' + (c.verdict === '真' ? 'ok' : 'bad') + '">' + (i + 1) + '.' + c.name + '出' + c.count + '报' + c.declared + c.verdict + '</span>';
+      }).join('') + '</div>');
+    }
+    $('ex').innerHTML = parts.join('');
+  } else {
+    $('ex').textContent = '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
+  }
   // 质疑账本:盘中一律不显示,只有一盘结束才揭晓 ✓
   if (view.challengeReveal) {
     var r = view.challengeRule;
     $('chalReveal').style.display = 'block';
-    $('chalReveal').innerHTML = '<b>质疑账本揭晓</b>(规则 成功+' + r.win + '/失败-' + r.fee + ',成功次数奖金 ' + r.winsBonus + ' 分/次)<br>' +
-      view.challengeReveal.map(function (x) {
-        return '&nbsp;&nbsp;' + x.name + ': 质疑分 ' + (x.ledger >= 0 ? '+' : '') + x.ledger + ' · 猜对 ' + x.wins + ' 次 · **补分 ' + (x.bonus >= 0 ? '+' : '') + x.bonus + '**';
-      }).join('<br>');
+    var rows = view.challengeReveal.map(function (x) {
+      return '<tr><td>' + x.name + '</td><td>' + (x.ledger >= 0 ? '+' : '') + x.ledger + '</td><td>' + x.wins + ' 次</td><td class="' + (x.bonus >= 0 ? 'good' : 'bad') + '">' + (x.bonus >= 0 ? '+' : '') + x.bonus + '</td></tr>';
+    }).join('');
+    $('chalReveal').innerHTML = '<b>质疑账本揭晓</b>(成功+' + r.win + '/失败-' + r.fee + ',成功次数奖金 ' + r.winsBonus + ' 分/次,撒谎奖励 ' + r.bluffBonus + ')<br>' +
+      '<table class="extable"><tr><th>座位</th><th>质疑分</th><th>猜对</th><th>盘末补分</th></tr>' + rows + '</table>';
   } else {
     $('chalReveal').style.display = 'none';
   }

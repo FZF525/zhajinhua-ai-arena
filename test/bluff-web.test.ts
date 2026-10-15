@@ -104,4 +104,11 @@ test("BLUFF-WEB-02 质疑账本盘中必须藏住,只有一盘结束才揭晓", 
   const sumBonus = vEnd.challengeReveal!.reduce((a, b) => a + b.bonus, 0);
   assert.equal(Math.abs(sumBonus) < 0.02, true, "补分必须零和,实际 " + sumBonus);
   assert.ok(vEnd.challengeReveal!.every((x) => typeof x.wins === "number"), "要给出猜对次数");
+  // 结构化展览(界面用它渲染卡片)
+  const ex = vEnd.exhibitionData;
+  assert.ok(ex, "盘末要给出结构化展览");
+  assert.equal(ex!.perSeat.length, 4, "四个座位都要有账本");
+  assert.ok(ex!.perSeat.every((p) => typeof p.lies === "number" && typeof p.bluffs === "number"), "账本要有假牌数与骗过全场次数");
+  assert.ok(Array.isArray(ex!.eaten) && Array.isArray(ex!.timeline), "要有牌堆去向与逐手回顾");
+  assert.ok(ex!.timeline.every((c) => ["真", "假", "半真半假"].includes(c.verdict)), "逐手回顾要有真假判定");
 });

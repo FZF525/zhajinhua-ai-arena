@@ -105,6 +105,14 @@ export interface BluffSeatView {
   bustedSeat: number | null;
   lastScores: number[];
   exhibition: { text: string; lines: string[] } | null;
+  /** 结构化的局末展览(界面用卡片渲染,而不是一坨文本)*/
+  exhibitionData: {
+    pileSize: number;
+    pileOf: Array<{ text: string; count: number }>;
+    eaten: Array<{ by: string; against: string; honest: boolean; eater: string; pot: number }>;
+    perSeat: Array<{ seat: number; name: string; claims: number; cards: number; lies: number; biggestLie: number; bluffs: number }>;
+    timeline: Array<{ seat: number; name: string; count: number; declared: string; honest: number; verdict: string }>;
+  } | null;
   /** 当前质疑规则(常驻,便于界面显示)*/
   challengeRule: { win: number; fee: number; winsBonus: number; bluffBonus: number; learnAlpha: number };
   /** **只有一盘结束时才出现** —— 盘中绝不泄露(谁质疑得准是隐藏信息)✓ */
@@ -142,6 +150,22 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     bustedSeat: st.bustedSeat,
     lastScores: st.lastScores,
     exhibition: ex ? { text: lines.join(String.fromCharCode(10)), lines } : null,
+    exhibitionData: ex
+      ? {
+          pileSize: ex.pileSize,
+          pileOf: Object.entries(ex.pileOf).map(([r, n]) => ({ text: rankText(Number(r)), count: Number(n) })),
+          eaten: ex.eaten.map((c) => ({ by: st.seats[c.by].name, against: st.seats[c.against].name, honest: c.honest, eater: st.seats[c.eater].name, pot: c.pot })),
+          perSeat: ex.perSeat.map((p) => ({ ...p, bluffs: ex.bluffs[p.seat] ?? 0 })),
+          timeline: ex.timeline.map((c) => ({
+            seat: c.seat,
+            name: st.seats[c.seat].name,
+            count: c.count,
+            declared: rankText(c.declared),
+            honest: c.honest,
+            verdict: c.honest === c.count ? "真" : c.honest === 0 ? "假" : "半真半假",
+          })),
+        }
+      : null,
     challengeRule: { win: st.cfg.challengeWin ?? 0, fee: st.cfg.challengeFee ?? 0, winsBonus: st.cfg.challengeWinsBonus ?? 0, bluffBonus: st.cfg.bluffBonus ?? 0, learnAlpha: s.learnAlpha },
     challengeReveal: st.over
       ? (() => {

@@ -39,8 +39,9 @@ const NAMES = KINDS.map((k, i) => (k.startsWith("llm:") ? k.slice(4).toUpperCase
 const st: BluffState = newBluffGame(CFG, NAMES, Number(arg("seed", "20260126")));
 const rng = createRng(7);
 const agents = [0, 1, 2, 3].map((seat) => createAdaptiveAgent(KINDS[seat] && BLUFF_PERSONAS[KINDS[seat]] ? BLUFF_PERSONAS[KINDS[seat]] : undefined));
+const USE_ASSIST = (process.argv.find((x) => x.startsWith("--assist=")) ?? "--assist=0").split("=")[1] === "1";   // 记牌器,默认关 ✓
 const USE_CORRECTION = (process.argv.find((x) => x.startsWith("--correct=")) ?? "--correct=0").split("=")[1] === "1";
-const llms = [0, 1, 2, 3].map((seat) => (KINDS[seat] === "llm:ds" || KINDS[seat] === "llm:glm" ? makeBluffLlmAgent(KINDS[seat].slice(4) as "ds" | "glm", agents[seat], undefined, USE_CORRECTION) : null));
+const llms = [0, 1, 2, 3].map((seat) => (KINDS[seat] === "llm:ds" || KINDS[seat] === "llm:glm" ? makeBluffLlmAgent(KINDS[seat].slice(4) as "ds" | "glm", agents[seat], undefined, USE_CORRECTION, USE_ASSIST) : null));
 
 const stat = NAMES.map(() => ({ actions: 0, plays: 0, cardsOut: 0, lies: 0, chal: 0, chalRight: 0, fallback: 0, tokensIn: 0, tokensOut: 0, ms: 0 }));
 let handNo = 0;

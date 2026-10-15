@@ -39,7 +39,9 @@ export const BLUFF_SYSTEM_CORRECTION = [
 ].join("\n");
 
 /** 把牌桌讲给模型听(含对手画像) */
-export function buildBluffPrompt(st: BluffState, seat: number, agent?: AdaptiveAgent): string {
+/** assist=true 时会把"外面还剩几张真话牌"直接算好告诉模型。
+ *  ⚠️ 作者指出:那等于**记牌器** ✗ —— 测的就不是"它会不会读人"了,所以**默认关闭** ✓ */
+export function buildBluffPrompt(st: BluffState, seat: number, agent?: AdaptiveAgent, assist = false): string {
   const me = st.seats[seat];
   const lines: string[] = [];
   lines.push("【第 " + st.handNo + " 局 · 你是 " + me.name + "(座位 " + seat + ")】");
@@ -99,7 +101,7 @@ export function fallbackAction(st: BluffState, seat: number): BluffAction {
 export interface BluffLlmInfo { ok: boolean; error?: string; reason?: string; ms: number; inputTokens: number; outputTokens: number; usedFallback?: boolean; calls: number }
 
 /** 造一个 LLM 座位;decide 是异步的(web 路由本身就是 async) */
-export function makeBluffLlmAgent(provider: "glm" | "ds", agent?: AdaptiveAgent, temperature?: number, useCorrection = false) {
+export function makeBluffLlmAgent(provider: "glm" | "ds", agent?: AdaptiveAgent, temperature?: number, useCorrection = false, useAssist = false) {
   const cfg: RemoteConfig = { ...BLUFF_LLM_PROVIDERS[provider], ...(temperature === undefined ? {} : { temperature }) };
   const info: BluffLlmInfo = { ok: false, ms: 0, inputTokens: 0, outputTokens: 0, calls: 0 };
   return {
@@ -108,7 +110,7 @@ export function makeBluffLlmAgent(provider: "glm" | "ds", agent?: AdaptiveAgent,
     async decide(st: BluffState, seat: number): Promise<BluffAction> {
       info.calls += 1;
       const system = useCorrection ? BLUFF_SYSTEM + "\n\n" + BLUFF_SYSTEM_CORRECTION : BLUFF_SYSTEM;
-      const r = await remoteChat(cfg, system, buildBluffPrompt(st, seat, agent));
+      const r = await remoteChat(cfg, system, buildBluffPrompt(st, seat, agent, useAssist));
       info.ok = r.ok; info.error = r.error; info.ms = r.ms; info.inputTokens = r.inputTokens; info.outputTokens = r.outputTokens;
       const parsed = r.ok ? parseBluffAction(r.text, st, seat) : null;
       info.usedFallback = !parsed;
