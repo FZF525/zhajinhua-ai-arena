@@ -1,5 +1,6 @@
 // 唬牌规则用例:先测后玩(今天的教训:测试全绿也要真跑一遍)
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { createDeck } from "../src/cards.ts";
 import type { Card } from "../src/cards.ts";
@@ -8,6 +9,7 @@ import { DEFAULT_BLUFF_CONFIG, BLUFF_BUST_MODES, createBluffGame, cardCount, ran
 import type { BluffState } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand, settleChallengeLedger } from "../src/games/bluff/rules.ts";
 import { BLUFF_PERSONAS, createAdaptiveAgent, createEvolvingAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
+import { describeBluffLog } from "../src/games/bluff/format.ts";
 
 const NAMES = ["A", "B", "C", "D"];
 function fresh(seed = 7): BluffState {
@@ -620,4 +622,22 @@ test("BLUFF-25 默认学习率是 1(实测:6 时桌上没人质疑)", () => {
   for (let i = 0; i < 3; i++) st.claims.push({ seat: 1, handNo: 1, claimedRank: st.roundRank, count: 5, honest: 0, revealed: true });
   a.observeHand(st);
   assert.deepEqual(a.statsFor(1, 5), { claims: 3, lies: 3 });
+});
+
+test("BLUFF-26 铁律:盘中日志绝不能出现「骗过全场」(那等于当场揭穿未被抓到的谎话)", () => {
+  const fmt = readFileSync(new URL("../src/games/bluff/format.ts", import.meta.url), "utf8");
+  assert.ok(fmt.includes("e.kind !== \"BLUFF_PAID\""), "日志必须先滤掉 BLUFF_PAID");
+  const st = newBluffGame({ ...DEFAULT_BLUFF_CONFIG, drawMode: "one" as const, bluffBonus: 5 }, NAMES, 1301);
+  const seat = st.turn;
+  const junkIds = st.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, st.roundRank, st.wildRank)).slice(0, 2).map((c) => c.id);
+  give(st, seat, junkIds);
+  play(st, seat, junkIds);
+  if (!st.handOver) {
+    const next = st.turn;
+    play(st, next, [st.seats[next].hand[0].id]);   // 下家出牌 = 不质疑 → 上一手"骗过全场"
+    const paid = st.events.filter((e) => e.kind === "BLUFF_PAID");
+    assert.ok(paid.length >= 1, "应当触发了骗过全场事件");
+    const log = describeBluffLog(st, NAMES, 20).join(" | ");
+    assert.ok(!log.includes("骗过全场"), "盘中日志不该出现「骗过全场」: " + log);
+  }
 });

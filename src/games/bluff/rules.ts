@@ -124,7 +124,9 @@ function buildExhibition(st: BluffState): void {
   const timeline = st.claims
     .filter((c) => mode === "full" || c.revealed)
     .map((c) => ({ seat: c.seat, count: c.count, declared: c.claimedRank, honest: c.honest, revealed: Boolean(c.revealed) }));
-  st.exhibition = { handNo: st.handNo, pileSize: st.pile.length, pileOf, eaten, timeline, perSeat };
+  // "骗过全场"次数(bluffBonus 触发次数)—— 盘中不写日志,只在这里公开 ✓
+  const bluffs = st.seats.map((p) => st.events.filter((e) => e.kind === "BLUFF_PAID" && e.by === p.seat).length);
+  st.exhibition = { handNo: st.handNo, pileSize: st.pile.length, pileOf, eaten, timeline, perSeat, bluffs };
   st.events.push({ kind: "EXHIBITION", handNo: st.handNo, pileSize: st.pile.length, perSeat });
 }
 

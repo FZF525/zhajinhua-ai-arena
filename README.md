@@ -6,7 +6,7 @@
 > **English?** A self-contained English overview is at **[docs/README.en.md](docs/README.en.md)**(project summary, quick start, measured findings).
 
 [![CI](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-165%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-166%20passed-brightgreen)
 ![node](https://img.shields.io/badge/node-%E2%89%A522.18-blue)
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
@@ -21,7 +21,7 @@
 | | |
 | --- | --- |
 | **规则** | 104 张牌(13 级 × 8 花色)/ **12 档牌型** / 闷牌看牌 / 比牌 / 踢牌封锁轮 / 挂起式截胡 |
-| **测试** | **166 条**(165 通过 / 1 条穷举默认跳过),含 **91,962,520 手牌全枚举**校验 |
+| **测试** | **167 条**(166 通过 / 1 条穷举默认跳过),含 **91,962,520 手牌全枚举**校验 |
 | **依赖** | **0** —— Node ≥ 22.18 原生跑 `.ts`,`git clone` 后**无需 `npm install`** |
 | **AI** | **10 个**:规则型 3 · 蒙特卡洛 3 · 精确胜率 3 · 自对弈学习 1 |
 | **擂台** | 循环赛排名 · 单点基准 · 上帝视角观战 · 时间轴回放 · 对局存档(约 25 KB/局) |
@@ -456,7 +456,7 @@ const cfg = makeConfig({
 
 | 验证项 | 结果 |
 | --- | --- |
-| 单元 + 端到端用例 | **144 条(143 通过 / 1 条穷举默认跳过)**,含引擎不变量、隐私可见性、一致性、AI 行为、真起服务的端到端冒烟、**唬牌规则(25)+ Web(2)+ LLM(3)+ 日志(2)** |
+| 单元 + 端到端用例 | **144 条(143 通过 / 1 条穷举默认跳过)**,含引擎不变量、隐私可见性、一致性、AI 行为、真起服务的端到端冒烟、**唬牌规则(26)+ Web(2)+ LLM(3)+ 日志(2)** |
 | 穷举分布回归(H-24) | 91,962,520 手牌逐项等于规格表,合计守恒,约 55 秒 |
 | 随机对战 fuzz | 40 组 / 160,000 动作 / 18,338 局,积分守恒 + INV1~INV9 全程成立 |
 | CLI 冒烟 | `--selftest` 通过;`--demo` 跑完整局并打印结算 |

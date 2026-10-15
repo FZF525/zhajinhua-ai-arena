@@ -54,6 +54,8 @@ export interface BluffExhibition {
   eaten: Array<{ by: number; against: number; honest: boolean; eater: number; pot: number }>;
   /** 整局每一手的真假时间线(局末才公开,用于复盘与信誉) */
   timeline: Array<{ seat: number; count: number; declared: number; honest: number }>;
+  /** 每座位"骗过全场"的次数(也就是 bluffBonus 被触发的次数)—— 局末才公开 ✓ */
+  bluffs: number[];
   perSeat: Array<{ seat: number; name: string; claims: number; cards: number; lies: number; biggestLie: number }>;
 }
 
@@ -164,8 +166,9 @@ export function describeExhibition(st: BluffState): string {
   }
   lines.push("  ── 这一局每个人说了什么 ──");
   for (const p of ex.perSeat) {
+    const bluffs = (ex.bluffs && ex.bluffs[p.seat]) || 0;
     lines.push("  " + p.name + ": 报了 " + p.claims + " 手 / 出 " + p.cards + " 张,其中假牌 " + p.lies +
-      " 张(最大一谎 " + p.biggestLie + " 张)");
+      " 张(最大一谎 " + p.biggestLie + " 张)" + (bluffs ? ",**骗过全场 " + bluffs + " 次**" : ""));
   }
   if (ex.timeline.length) {
     lines.push("  ── 逐手回顾(局末才公开)──");

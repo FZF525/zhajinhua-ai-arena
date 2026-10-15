@@ -37,7 +37,12 @@ export function describeBluffEvent(e: Ev, names: string[]): string {
   }
 }
 
-/** 取最近 n 条,按时间顺序 */
+/** 盘中给玩家看的日志 —— **必须滤掉"骗过全场"**:
+ *  那条事件等于当场告诉所有人"他刚才那手是假的",而整个设计的前提是
+ *  **没被质疑的谎话要藏住**(账本都是盘末才揭晓的)。实属设计上的自相矛盾,已修 ✓ */
 export function describeBluffLog(st: BluffState, names: string[], n = 14): string[] {
-  return st.events.slice(-n).map((e) => describeBluffEvent(e as Ev, names));
+  return st.events
+    .filter((e) => e.kind !== "BLUFF_PAID")
+    .slice(-n)
+    .map((e) => describeBluffEvent(e as Ev, names));
 }
