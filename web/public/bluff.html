@@ -76,7 +76,7 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
       <button id="btnNext" style="display:none">下一局</button>
     </div>
     <div class="row">
-      <label class="hint">你在座位</label>
+      <label class="hint" title="热座:轮到人类座位时会自动跟随,一般不用改">你在座位</label>
       <select id="seatSel"><option value="0">0 · 我</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
       <label class="hint">对家1</label>
       <select id="kind1"><option value="Lao6">Lao6 老六</option><option value="Bajiao" selected>Bajiao 芭蕉</option><option value="Nizi">Nizi 妮子</option><option value="Nannan">Nannan 囡囡</option><option value="random">随机</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
@@ -107,6 +107,7 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
 <div id="toast"></div>
 <script>
 var view = null, sel = new Set(), seat = 0, busy = false, timer = null, picked = null;
+var autoFollow = true;   // 轮到人类座位时自动跟随过去(热座的关键:不然会卡死)
 function $(id) { return document.getElementById(id); }
 function toast(msg) { var t = $('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2600); }
 function esc(s) { return String(s).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }); }
@@ -120,13 +121,25 @@ function api(path, body) {
 }
 function render() {
   if (!view) return;
+  // 关键:如果当前该行动的是一个「人类座位」,而我的视角不在那里 → 自动跟随
+  // (不做这一步,热座换过座位后就会卡死:谁都点不动 ✓ 这是实测踩到的坑)
+  var turnSeat = view.seats[view.turn];
+  if (autoFollow && turnSeat && turnSeat.kind === 'human' && view.turn !== seat && !view.handOver && !view.over) {
+    seat = view.turn;
+    $('seatSel').value = String(seat);
+    sel.clear();
+    toast('已自动切到座位 ' + seat + '(' + turnSeat.name + ')—— 轮到人类玩家');
+    refreshOnce().then(render);
+    return;
+  }
   $('handNo').textContent = view.handNo; $('matchNo').textContent = view.matchNo;
   $('wild').textContent = view.wildText; $('rank').textContent = view.roundText;
   $('pile').textContent = view.pileCount;
   $('bustMode').textContent = ($('bustSel').value === 'loose' ? '爆牌线 52' : '爆牌线 40');
   var mine = view.turn === seat;
   $('turnWho').textContent = view.over ? '一盘结束' : (view.handOver ? '本局结束' : (mine ? '轮到你' : '轮到 ' + view.seats[view.turn].name));
-  $('turnHint').textContent = view.over ? '' : ('我的手牌 ' + view.seats[seat].cards + ' 张');
+  $('turnHint').textContent = view.over ? '' : (view.handOver ? '本局结束,点「下一局」' : (mine ? '轮到你了:选 1~5 张牌,或质疑上一手' : '等 ' + view.seats[view.turn].name + ' 出牌(座位 ' + view.turn + ')'));
+  $('turnWho').textContent = view.over ? '一盘结束' : (view.handOver ? '本局结束' : (mine ? '轮到你' : '轮到 ' + view.seats[view.turn].name));
   var last = view.log.length ? view.log[view.log.length - 1] : '';
   $('banner').textContent = last || '-';
   $('seats').innerHTML = view.seats.map(function (s) {
@@ -160,6 +173,9 @@ function render() {
   var showRank = (cand.length > 1 && picked !== null) ? (cand.filter(function (c) { return c.rank === picked; })[0] || {}).text : view.roundText;
   $('btnPlay').textContent = '出牌(' + sel.size + ' 张,报全是 ' + showRank + ')';
   $('btnChal').disabled = !canAct || !view.legal.canChallenge;
+  // 按钮为什么不能点,要说出来(不然就是「点了没反应」)
+  $('btnPlay').title = canAct ? '' : (view.over ? '一盘已结束' : view.handOver ? '本局已结束' : '现在轮到 ' + view.seats[view.turn].name + '(座位 ' + view.turn + '),还没到你');
+  $('btnChal').title = canAct ? (view.legal.canChallenge ? '' : '没有可质疑的上一手') : '现在轮到 ' + view.seats[view.turn].name;
   $('btnNext').style.display = view.handOver && !view.over ? 'inline-block' : 'none';
   $('ex').textContent = view.exhibition ? view.exhibition.text : '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
   $('log').innerHTML = view.log.map(function (t, i) {

@@ -59,6 +59,11 @@ test("BLUFF-WEB-01 真起服务打几手唬牌(含展览面板与切换爆牌线
     const last = await (await fetch(BASE + "/api/bluff/state?seat=0")).json();
     assert.equal(last.ok, true);
     assert.equal(last.view.seats.reduce((s: number, x: { cards: number }) => s + x.cards, 0) + last.view.pileCount <= 104, true, "牌数不该超过一副");
+    // 回归:热座坐错座位时必须明确拒绝,并告诉现在轮到谁(实测踩到:视角在座位 2 而轮到座位 0 → 界面卡死)
+    const wrong = await (await fetch(BASE + "/api/bluff/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ seat: 2, type: "PLAY", cardIds: [] }) })).json();
+    assert.equal(wrong.ok, false, "不该允许替别的座位行动");
+    assert.ok(String(wrong.error).includes("还没轮到你"), "错误要说清: " + wrong.error);
+
     // 传旧的/错误的座位类型必须明确报错(而不是悄悄降级 —— 那会让前端表现成「点了没反应」)
     const bad = await (await fetch(BASE + "/api/bluff/new", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bust: "tight", seats: ["human", "standard", "standard", "gambler"] }) })).json();
     assert.equal(bad.ok, false, "旧的座位名 standard 应当被明确拒绝");

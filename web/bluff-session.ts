@@ -125,7 +125,7 @@ export function bluffApply(s: BluffSession, seat: number, action: BluffAction): 
     return { ok: true };
   }
   if (action.seat !== seat) return { ok: false, error: "座位不符" };
-  if (seat !== st.turn) return { ok: false, error: "还没轮到你" };
+  if (seat !== st.turn) return { ok: false, error: "还没轮到你:现在轮到座位 " + st.turn + "(" + st.seats[st.turn].name + ")" };
   const r = action.type === "PLAY" ? play(st, seat, action.cardIds) : challenge(st, seat);
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }
