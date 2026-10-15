@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>唬牌 Bluff · 热座</title>
+<link rel="stylesheet" href="/style.css" />
 <style>
 :root { --bg:#10141c; --panel:#181e29; --line:#2a3444; --fg:#e6ecf5; --dim:#8b9bb4; --gold:#d8a657; --bad:#e06c75; --good:#98c379; }
 * { box-sizing: border-box; }
@@ -23,10 +24,13 @@ main { display:grid; grid-template-columns: 1fr 320px; gap:16px; padding:16px; a
 .seat .n { font-weight:600; }
 .seat .c { color:var(--dim); font-size:13px; }
 .hand { display:flex; flex-wrap:wrap; gap:6px; margin:14px 0; }
-.card { width:46px; height:60px; border-radius:8px; border:1px solid var(--line); background:#0d1219; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; user-select:none; font-weight:600; }
-.card.honest { border-color:#3f6a44; background:#122016; }
-.card.sel { outline:2px solid var(--gold); transform:translateY(-4px); }
-.card small { color:var(--dim); font-weight:400; font-size:11px; }
+
+/* 牌面本身用 style.css 里那一套(和炸金花同一份,尺寸 74x86 / small 56x64,色系 class 通用);
+   这里只加唬牌自己的两个标记:能当"真话"的牌、以及选中的牌 */
+.card.honest { box-shadow:0 0 0 2px #4c9a5a; }
+.card.honest.sel { box-shadow:0 0 0 3px var(--gold); }
+.card.pick { transform:translateY(-4px); }
+.hand { display:flex; flex-wrap:wrap; gap:6px; }
 .btns { display:flex; gap:10px; flex-wrap:wrap; }
 button { background:#222c3c; color:var(--fg); border:1px solid var(--line); border-radius:9px; padding:9px 16px; font-size:15px; cursor:pointer; }
 button.primary { background:var(--gold); color:#191307; border-color:var(--gold); font-weight:700; }
@@ -109,9 +113,9 @@ function render() {
     return '<div class="seat ' + (s.seat === view.turn ? 'active' : '') + '"><div class="n">' + s.name + '</div>' +
       '<div class="c">' + s.cards + ' 张 · ' + s.points + ' 分</div><div class="c">' + s.kind + '</div></div>';
   }).join('');
-  $('hand').innerHTML = view.hand.map(function (c, i) {
-    return '<div class="card ' + (c.honest ? 'honest' : '') + (sel.has(c.id) ? ' sel' : '') + '" data-id="' + c.id + '">' +
-      (c.honest ? '★' : '') + '<div>' + c.text + '</div><small>' + c.suit.slice(0, 2) + '</small></div>';
+  $('hand').innerHTML = view.hand.map(function (c) {
+    var cls = 'card small ' + (c.family ? c.family.toLowerCase() : '') + (c.honest ? ' honest' : '') + (sel.has(c.id) ? ' sel' : '');
+    return '<div class="' + cls + '" data-id="' + c.id + '" title="' + (c.honest ? '这张能当本回合点数(真话)' : '这张是假话素材') + '">' + c.text + '</div>';
   }).join('');
   Array.prototype.forEach.call(document.querySelectorAll('.card'), function (el) {
     el.onclick = function () {

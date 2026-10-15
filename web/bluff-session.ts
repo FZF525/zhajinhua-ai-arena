@@ -5,6 +5,7 @@
 //  · AI 座位:可为每个座位指定 human / 性格名 / random;AI 由服务端自动推进
 //  · 局末展览:局末把牌堆真容 + 谎话账本一起给前端(纯展示 ✓)
 //  · 踩过的坑:自适应 agent 必须**每盘新建**(跨盘复用会串数据)
+import { cardText } from "../src/cards.ts";
 import { BLUFF_BUST_MODES, describeExhibition, isHonestCard, publicView, rankOf, rankText } from "../src/games/bluff/state.ts";
 import type { BluffBustMode, BluffState } from "../src/games/bluff/state.ts";
 import { legalActions, newBluffGame, startHand, play, challenge } from "../src/games/bluff/rules.ts";
@@ -12,6 +13,10 @@ import { BLUFF_PERSONAS, DEFAULT_EXCEL, createAdaptiveAgent, randomDecide } from
 import { makeBluffLlmAgent } from "../src/games/bluff/llm.ts";
 import type { BluffAction } from "../src/games/bluff/legal.ts";
 import { createRng } from "../src/rng.ts";
+import { createDeck } from "../src/cards.ts";
+
+/** 用整副牌查出每张牌的完整信息(花色 emoji / 色系) */
+const deckById = new Map(createDeck().map((c) => [c.id, c]));
 
 export type SeatKind = "human" | "random" | keyof typeof BLUFF_PERSONAS | "llm:glm" | "llm:ds";
 
@@ -57,7 +62,7 @@ export interface BluffSeatView {
   pileCount: number;
   pending: { seat: number; count: number } | null;
   seats: Array<{ seat: number; name: string; cards: number; points: number; kind: SeatKind }>;
-  hand: Array<{ id: string; text: string; honest: boolean; suit: string }>;
+  hand: Array<{ id: string; text: string; honest: boolean; suit: string; family: string }>;
   legal: { canChallenge: boolean; maxPlay: number };
   handOver: boolean;
   over: boolean;
@@ -71,10 +76,6 @@ export interface BluffSeatView {
 /** 某个座位看到的世界(视角隔离:只给自己的手牌) */
 export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
   const st = s.state;
-  const cardTextOf = (c: { id: string }) => {
-    const parts = c.id.split("-");
-    return parts.slice(1).join("-") + parts[0].slice(0, 1);
-  };
   const acts = legalActions(st);
   const canChallenge = acts.some((a) => a.type === "CHALLENGE");
   const ex = st.exhibition;
@@ -91,7 +92,8 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     pileCount: st.pile.length,
     pending: st.pending ? { seat: st.pending.seat, count: st.pending.cards.length } : null,
     seats: st.seats.map((p) => ({ seat: p.seat, name: p.name, cards: p.hand.length, points: p.points, kind: s.kinds[p.seat] })),
-    hand: st.seats[seat].hand.map((c) => ({ id: c.id, text: rankText(rankOf(c)), honest: isHonestCard(c, st.roundRank, st.wildRank), suit: c.id.split("-")[0] })),
+    // 牌面 = 和炸金花完全同一套(cards.ts 的 cardText:emoji 花色 + 点数)
+    hand: st.seats[seat].hand.map((c) => { const full = deckById.get(c.id)!; return { id: c.id, text: cardText(full), honest: isHonestCard(c, st.roundRank, st.wildRank), suit: full.suit, family: full.family }; }),
     legal: { canChallenge, maxPlay: st.cfg.maxPlay },
     handOver: st.handOver,
     over: st.over,
