@@ -13,12 +13,18 @@ import type { BluffAiOptions } from "../src/games/bluff/ai.ts";
 
 const N = Number(process.argv[2] ?? 60);
 const MODE = process.argv[3] ?? "mix";
-const CHALLENGE_AT = Number(process.argv[4] ?? DEFAULT_EXCEL.challengeAt);
+const flag = (name: string, dflt: number) => {
+  const hit = process.argv.find((x) => x.startsWith("--" + name + "="));
+  return hit ? Number(hit.split("=")[1]) : dflt;
+};
+const CHALLENGE_AT = flag("challenge", DEFAULT_EXCEL.challengeAt);
 const OPTS: BluffAiOptions = { ...DEFAULT_EXCEL, challengeAt: CHALLENGE_AT };
+// 可调:爆牌线 / 手牌数(手牌数 × 4 不能超过 104)
+const CFG = { ...DEFAULT_BLUFF_CONFIG, bustCards: flag("bust", DEFAULT_BLUFF_CONFIG.bustCards), handSize: flag("hand", DEFAULT_BLUFF_CONFIG.handSize) };
 const NAMES = MODE === "excel4" ? ["EX0", "EX1", "EX2", "EX3"] : ["EXCEL", "R1", "R2", "R3"];
 
 function runMatch(seed: number) {
-  const st: BluffState = newBluffGame(DEFAULT_BLUFF_CONFIG, NAMES, seed);
+  const st: BluffState = newBluffGame(CFG, NAMES, seed);
   const rng = createRng(seed * 31 + 7);
   let actions = 0, challenges = 0, plays = 0, lieCards = 0, playedCards = 0;
   const piles: number[] = [];
@@ -75,4 +81,4 @@ console.log("=== 节奏数据(每局)===" );
 console.log("  平均动作数: " + (sumActions / (N * 4)).toFixed(1) + "   其中质疑 " + (sumChal / (N * 4)).toFixed(1) + ",出牌 " + (sumPlays / (N * 4)).toFixed(1));
 console.log("  出牌总张数 " + sumCards + "  其中假牌 " + sumLie + "  →  假牌占比 " + ((sumLie / Math.max(1, sumCards)) * 100).toFixed(0) + "%");
 console.log("  局末牌堆: 平均 " + avg(allPiles).toFixed(1) + " 张,最大 " + Math.max(...allPiles) + " 张");
-console.log("  结束方式: " + JSON.stringify(endCount) + "   (empty = 出空手牌赢 / bust = 有人 > " + DEFAULT_BLUFF_CONFIG.bustCards + " 张)");
+console.log("  结束方式: " + JSON.stringify(endCount) + "   (empty = 出空手牌赢 / bust = 有人 > " + CFG.bustCards + " 张)");
