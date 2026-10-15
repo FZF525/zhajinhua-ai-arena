@@ -79,17 +79,19 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
       <label class="hint" title="热座:轮到人类座位时会自动跟随,一般不用改">你在座位</label>
       <select id="seatSel"><option value="0">0 · 我</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
       <label class="hint">对家1</label>
-      <select id="kind1"><option value="Lao6">Lao6 老六</option><option value="Bajiao" selected>Bajiao 芭蕉</option><option value="Nizi">Nizi 妮子</option><option value="Nannan">Nannan 囡囡</option><option value="random">随机</option><option value="Lynn">Lynn 自进化</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
+      <select id="kind1"><option value="Lao6">Lao6 老六</option><option value="Bajiao" selected>Bajiao 芭蕉</option><option value="Nizi">Nizi 妮子</option><option value="Nannan">Nannan 囡囡</option><option value="random">随机</option><option value="Lynn">Lynn 自进化</option><option value="Xiaozhen">Xiaozhen 小针(精准狙击)</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
       <label class="hint">对家2</label>
-      <select id="kind2"><option value="Lao6">Lao6 老六</option><option value="Bajiao">Bajiao 芭蕉</option><option value="Nizi" selected>Nizi 妮子</option><option value="Nannan">Nannan 囡囡</option><option value="random">随机</option><option value="Lynn">Lynn 自进化</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
+      <select id="kind2"><option value="Lao6">Lao6 老六</option><option value="Bajiao">Bajiao 芭蕉</option><option value="Nizi" selected>Nizi 妮子</option><option value="Nannan">Nannan 囡囡</option><option value="random">随机</option><option value="Lynn">Lynn 自进化</option><option value="Xiaozhen">Xiaozhen 小针(精准狙击)</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
       <label class="hint">对家3</label>
-      <select id="kind3"><option value="Lao6">Lao6 老六</option><option value="Bajiao">Bajiao 芭蕉</option><option value="Nizi">Nizi 妮子</option><option value="Nannan" selected>Nannan 囡囡</option><option value="random">随机</option><option value="Lynn">Lynn 自进化</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
+      <select id="kind3"><option value="Lao6">Lao6 老六</option><option value="Bajiao">Bajiao 芭蕉</option><option value="Nizi">Nizi 妮子</option><option value="Nannan" selected>Nannan 囡囡</option><option value="random">随机</option><option value="Lynn">Lynn 自进化</option><option value="Xiaozhen">Xiaozhen 小针(精准狙击)</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
     </div>
     <div class="row">
       <label class="hint">爆牌线</label>
       <select id="bustSel"><option value="tight">40(火爆局)</option><option value="loose">52(技术局)</option></select>
       <label class="hint">抽点数</label>
       <select id="drawSel"><option value="one">每回合抽 1 个(难度高)</option><option value="choose3">抽 3 个我选 1 个(有主动权)</option></select>
+      <label class="hint">质疑赌注</label>
+      <select id="feeSel"><option value="0">0(无赌注)</option><option value="5">5 分(失败转给被质疑者)</option><option value="10">10 分</option></select>
       <label class="hint">AI 出手速度</label>
       <select id="speedSel"><option value="900">慢(看得清)</option><option value="420" selected>中</option><option value="120">快</option><option value="0">不停顿</option></select>
       <button id="btnNew" class="primary">开新盘</button>
@@ -214,12 +216,12 @@ $('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); re
 $('speedSel').onchange = function () { schedule(); };
 $('btnNew').onclick = function () {
   var kinds = ['human', $('kind1').value, $('kind2').value, $('kind3').value];
-  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, seats: kinds }).then(function (r) {
+  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, fee: Number($('feeSel').value), seats: kinds }).then(function (r) {
     if (!r.ok) { toast(r.error); return; }
     view = r.view; sel.clear(); render(); schedule();
   });
 };
-api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
+api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, fee: Number($('feeSel').value), seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
   .then(function (r) { if (r.ok) { view = r.view; render(); schedule(); } })
   .catch(function () { });
 </script>

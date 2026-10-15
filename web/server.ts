@@ -179,7 +179,8 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: false, error: "未知的座位类型:" + parsed.bad.join(",") + ";可选:" + ["human", "random", "Lao6", "Bajiao", "Nizi", "Nannan", "llm:glm", "llm:ds"].join("/") });
     }
     const drawMode: "one" | "choose3" = body.draw === "choose3" ? "choose3" : "one";
-    bluff = createBluffSession(bust, parsed.kinds, undefined, drawMode);
+    const fee = Math.max(0, Math.min(50, Number(body.fee ?? 0) || 0));
+    bluff = createBluffSession(bust, parsed.kinds, undefined, drawMode, fee);
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
   }
   if (path === "/api/bluff/step" && req.method === "POST") {

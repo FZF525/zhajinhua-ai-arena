@@ -39,9 +39,11 @@ export const DEFAULT_EXCEL: BluffAiOptions = {
 };
 
 /** 四位 AI 的名字(作者命名):Lao6 赌徒 / Bajiao 标准 / Nizi 试探 / Nannan 老实人 */
-export const BLUFF_NAMES = ["Lao6", "Bajiao", "Nizi", "Nannan"] as const;
+export const BLUFF_NAMES = ["Lao6", "Bajiao", "Nizi", "Nannan", "Xiaozhen"] as const;
 /** 三种现成性格:保守(老实人)/ 标准 / 激进(赌徒) */
 export const BLUFF_PERSONAS: Record<string, BluffAiOptions> = {
+  // 小针:精准狙击 —— 门槛最高(只在证据很强时才质疑),也最诚实(不贪)
+  Xiaozhen: { challengeAt: 0.78, maxLie: 2, maxHonest: 5, greed: 0, bustFear: 1.8, oppBluffSize: 1 },
   // 老六:偷鸡阴人的那位 —— 敢谎报 5 张、敢质疑、不怕爆
   Lao6: { challengeAt: 0.35, maxLie: 5, maxHonest: 5, greed: 0.6, bustFear: 1.1, oppBluffSize: 3 },
   // 芭蕉:稳扎稳打的标准打法

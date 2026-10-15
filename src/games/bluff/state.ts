@@ -16,6 +16,8 @@ export interface BluffConfig {
   handsPerMatch: number;
   /** 抽点数方式:one = 每回合抽 1 个(现状);choose3 = 抽 3 个由出牌者选 1(把运气变成选择) */
   drawMode?: "one" | "choose3";
+  /** 质疑失败的赌注:失败者扣这么多分,**转给被质疑者**(保持零和)。默认 0 */
+  challengeFee?: number;
 }
 
 /** 两种爆牌线(作者定的两种玩法):紧 = 40 张,松 = 52 张(= 两副手牌量)*/

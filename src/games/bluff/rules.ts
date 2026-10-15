@@ -184,7 +184,15 @@ export function challenge(st: BluffState, seat: number): BluffResult {
   st.seats[eater].hand.push(...pot);
   st.pile = [];
   st.pending = null;
-  const ev = { kind: "CHALLENGE", by: seat, against: pend.seat, honest, eater, pot: pot.length };
+  // 质疑失败的赌注:失败者扣分,转给被质疑者(零和守恒)
+  const fee = Math.max(0, st.cfg.challengeFee ?? 0);
+  let feePaid = 0;
+  if (fee > 0 && honest) {
+    feePaid = Math.min(fee, Math.max(0, st.seats[seat].points + 1000));   // 允许扣成负分,但防止极端
+    st.seats[seat].points -= feePaid;
+    st.seats[pend.seat].points += feePaid;
+  }
+  const ev = { kind: "CHALLENGE", by: seat, against: pend.seat, honest, eater, pot: pot.length, fee: feePaid };
   st.events.push(ev);
   // 关键:无论成败,turn 都保持质疑者(他就是上家的下家)—— 1→2→3→4 循环不破
   st.turn = seat;

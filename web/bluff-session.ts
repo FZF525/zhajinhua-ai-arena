@@ -45,8 +45,8 @@ export interface BluffSession {
   rng: ReturnType<typeof createRng>;
 }
 
-export function createBluffSession(bust: BluffBustMode, kinds: SeatKind[], seed?: number, drawMode: "one" | "choose3" = "one"): BluffSession {
-  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode };
+export function createBluffSession(bust: BluffBustMode, kinds: SeatKind[], seed?: number, drawMode: "one" | "choose3" = "one", fee = 0): BluffSession {
+  const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode, challengeFee: Math.max(0, fee) };
   const names = ["你", "左边", "对面", "右边"];
   const s = Math.floor((seed ?? Date.now()) % 100000);
   const state = newBluffGame(cfg, names, s);

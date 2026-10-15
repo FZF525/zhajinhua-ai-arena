@@ -441,3 +441,32 @@ test("BLUFF-18 Lynn 自进化:能决策、能读账本、一盘结束后能留�
   assert.ok(lynn.bestScore >= 30, "窗口里的最好成绩要记住,实际 " + lynn.bestScore);
   assert.ok(before.challengeAt >= 0.2);
 });
+
+test("BLUFF-19 质疑赌注:失败者扣 5 分并转给被质疑者(零和),成功不扣", () => {
+  const cfg = { ...DEFAULT_BLUFF_CONFIG, challengeFee: 5 };
+  // 场景一:质疑一个"说真话"的人 → 质疑者应当扣 5 分
+  const st = newBluffGame(cfg, NAMES, 801);
+  const seat = st.turn;
+  const R = st.roundRank, W = st.wildRank;
+  const honestIds = st.seats.flatMap((p) => p.hand).filter((c) => isHonestCard(c, R, W)).slice(0, 2).map((c) => c.id);
+  give(st, seat, honestIds);
+  play(st, seat, honestIds);
+  const ch = (seat + 1) % 4;
+  const before = st.seats.map((p) => p.points);
+  challenge(st, ch);
+  assert.equal(st.seats[ch].points, before[ch] - 5, "质疑失败者应当扣 5 分");
+  assert.equal(st.seats[seat].points, before[seat] + 5, "这 5 分应当转给被质疑者");
+  assert.equal(st.seats.reduce((s, p) => s + p.points, 0), before.reduce((s, p) => s + p, 0), "整体必须零和");
+
+  // 场景二:质疑一个"说谎"的人 → 质疑成功,不扣分
+  const st2 = newBluffGame(cfg, NAMES, 802);
+  const seat2 = st2.turn;
+  const fakeIds = st2.seats.flatMap((p) => p.hand).filter((c) => !isHonestCard(c, st2.roundRank, st2.wildRank)).slice(0, 2).map((c) => c.id);
+  give(st2, seat2, fakeIds);
+  play(st2, seat2, fakeIds);
+  const ch2 = (seat2 + 1) % 4;
+  const before2 = st2.seats.map((p) => p.points);
+  challenge(st2, ch2);
+  assert.equal(st2.seats[ch2].points, before2[ch2], "质疑成功不该扣分");
+  assert.equal(st2.seats[seat2].points, before2[seat2], "被质疑者也不该因为被猜中而额外扣分");
+});
