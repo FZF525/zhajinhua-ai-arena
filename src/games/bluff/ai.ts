@@ -38,8 +38,18 @@ export const DEFAULT_EXCEL: BluffAiOptions = {
   challengeAt: 0.55, maxLie: 2, maxHonest: 5, greed: 0.1, bustFear: 1.6, oppBluffSize: 1,
 };
 
+/** 四位 AI 的名字(作者命名):Lao6 赌徒 / Bajiao 标准 / Nizi 试探 / Nannan 老实人 */
+export const BLUFF_NAMES = ["Lao6", "Bajiao", "Nizi", "Nannan"] as const;
 /** 三种现成性格:保守(老实人)/ 标准 / 激进(赌徒) */
 export const BLUFF_PERSONAS: Record<string, BluffAiOptions> = {
+  // 老六:偷鸡阴人的那位 —— 敢谎报 5 张、敢质疑、不怕爆
+  Lao6: { challengeAt: 0.35, maxLie: 5, maxHonest: 5, greed: 0.6, bustFear: 1.1, oppBluffSize: 3 },
+  // 芭蕉:稳扎稳打的标准打法
+  Bajiao: { ...DEFAULT_EXCEL },
+  // 妮子:多疑但不贪 —— 爱管闲事、动不动要看牌
+  Nizi: { challengeAt: 0.42, maxLie: 3, maxHonest: 4, greed: 0.25, bustFear: 1.3, oppBluffSize: 2 },
+  // 囡囡:几乎不质疑、从不说谎 —— 最好骗的那位
+  Nannan: { challengeAt: 0.8, maxLie: 1, maxHonest: 3, greed: 0, bustFear: 2.0, oppBluffSize: 1 },
   // 老实人:几乎不质疑、从不说谎 —— 在唬牌里这是最容易被人拿捏的性格 ✗
   honest: { challengeAt: 0.8, maxLie: 1, maxHonest: 3, greed: 0, bustFear: 2.0, oppBluffSize: 1 },
   // 标准:按概率办事,偶尔贪一点

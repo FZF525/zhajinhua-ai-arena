@@ -22,7 +22,7 @@ import type { Recording } from "../src/replay.ts";
 import { saveReplay, listReplays, loadReplay, deleteReplay, replaysDir, pruneReplays } from "../src/store.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
 import { actorOf, buildView, viewerSeatFor } from "./view.ts";
-import { createBluffSession, bluffSeatView, bluffApply, bluffRunAi, parseSeatKinds } from "./bluff-session.ts";
+import { createBluffSession, bluffSeatView, bluffApply, bluffRunAi, bluffRunAiAsync, parseSeatKinds } from "./bluff-session.ts";
 import type { BluffSession } from "./bluff-session.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -172,12 +172,12 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const bust = body.bust === "loose" ? "loose" : "tight";
     bluff = createBluffSession(bust, parseSeatKinds(body.seats));
-    bluffRunAi(bluff);
+    await bluffRunAiAsync(bluff);
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
   }
   if (path === "/bluff/state") {
     if (!bluff) return sendJson(res, 200, { ok: false, error: "还没有开局" });
-    bluffRunAi(bluff);
+    await bluffRunAiAsync(bluff);
     const seat = Math.max(0, Math.min(3, Number(url.searchParams.get("seat") ?? 0)));
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
   }
@@ -194,7 +194,7 @@ const server = http.createServer(async (req, res) => {
       const r = bluffApply(bluff, seat, action);
       if (!r.ok) return sendJson(res, 200, { ok: false, error: r.error });
     }
-    bluffRunAi(bluff);
+    await bluffRunAiAsync(bluff);
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
   }
 

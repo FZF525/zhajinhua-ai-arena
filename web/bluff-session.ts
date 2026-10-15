@@ -9,13 +9,14 @@ import { BLUFF_BUST_MODES, describeExhibition, isHonestCard, publicView, rankOf,
 import type { BluffBustMode, BluffState } from "../src/games/bluff/state.ts";
 import { legalActions, newBluffGame, startHand, play, challenge } from "../src/games/bluff/rules.ts";
 import { BLUFF_PERSONAS, DEFAULT_EXCEL, createAdaptiveAgent, randomDecide } from "../src/games/bluff/ai.ts";
+import { makeBluffLlmAgent } from "../src/games/bluff/llm.ts";
 import type { BluffAction } from "../src/games/bluff/legal.ts";
 import { createRng } from "../src/rng.ts";
 
-export type SeatKind = "human" | "random" | keyof typeof BLUFF_PERSONAS;
+export type SeatKind = "human" | "random" | keyof typeof BLUFF_PERSONAS | "llm:glm" | "llm:ds";
 
 /** 座位类型白名单(前端传来的东西一律过滤) */
-const KINDS: string[] = ["human", "random", ...Object.keys(BLUFF_PERSONAS)];
+const KINDS: string[] = ["human", "random", ...Object.keys(BLUFF_PERSONAS), "llm:glm", "llm:ds"];
 export function parseSeatKinds(raw: unknown): SeatKind[] {
   const arr = Array.isArray(raw) ? raw : [];
   const out: SeatKind[] = [];
@@ -30,6 +31,8 @@ export interface BluffSession {
   state: BluffState;
   kinds: SeatKind[];
   agents: Array<ReturnType<typeof createAdaptiveAgent>>;
+  /** LLM 座位(用到了才创建,不浪费一次调用) */
+  llm: Array<ReturnType<typeof makeBluffLlmAgent> | null>;
   rng: ReturnType<typeof createRng>;
 }
 
@@ -39,7 +42,7 @@ export function createBluffSession(bust: BluffBustMode, kinds: SeatKind[], seed?
   const s = Math.floor((seed ?? Date.now()) % 100000);
   const state = newBluffGame(cfg, names, s);
   const agents = [0, 1, 2, 3].map((seat) => createAdaptiveAgent(kinds[seat] !== "human" && kinds[seat] !== "random" ? BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] : DEFAULT_EXCEL));
-  return { state, kinds, agents, rng: createRng(s * 7 + 1) };
+  return { state, kinds, agents, llm: [null, null, null, null], rng: createRng(s * 7 + 1) };
 }
 
 export interface BluffSeatView {
@@ -134,6 +137,37 @@ export function bluffRunAi(s: BluffSession, maxSteps = 400): number {
     const action = s.kinds[seat] === "random"
       ? randomDecide(st, seat, s.rng)
       : s.agents[seat].decide(st, seat, s.rng);
+    const r = action.type === "PLAY" ? play(st, action.seat, action.cardIds) : challenge(st, action.seat);
+    if (!r.ok) break;
+    acted++;
+  }
+  return acted;
+}
+/** 异步推进:LLM 座位需要网络调用,所以单独一条路径(sync 版留给 CLI 与测试) */
+export async function bluffRunAiAsync(s: BluffSession, maxSteps = 200): Promise<number> {
+  const st = s.state;
+  let acted = 0;
+  while (acted < maxSteps) {
+    if (st.over) break;
+    if (st.handOver) {
+      if (st.over) break;
+      for (const ag of s.agents) ag.observeHand(st);
+      startHand(st);
+      continue;
+    }
+    const seat = st.turn;
+    const kind = s.kinds[seat];
+    if (kind === "human") break;
+    let action: BluffAction;
+    if (kind === "llm:glm" || kind === "llm:ds") {
+      const provider = kind.slice(4) as "glm" | "ds";
+      s.llm[seat] = s.llm[seat] ?? makeBluffLlmAgent(provider, s.agents[seat]);
+      action = await s.llm[seat]!.decide(st, seat);
+    } else if (kind === "random") {
+      action = randomDecide(st, seat, s.rng);
+    } else {
+      action = s.agents[seat].decide(st, seat, s.rng);
+    }
     const r = action.type === "PLAY" ? play(st, action.seat, action.cardIds) : challenge(st, action.seat);
     if (!r.ok) break;
     acted++;

@@ -223,6 +223,27 @@ export function repairParams(state: GameState, seat: number, type: string, legal
 }
 
 /** 构造一个"外部 AI 玩家" */
+/** 通用的一次对话调用(OpenAI 兼容):其它游戏直接复用,不必再抄一遍 HTTP 细节
+ *  (本项目已经因为「手搓第二份领域逻辑」栽过两次,所以这里抽成公用) */
+export async function remoteChat(cfg: RemoteConfig, system: string, user: string): Promise<{ ok: boolean; text: string; error?: string; ms: number; inputTokens: number; outputTokens: number }> {
+  const key = cfg.apiKey ?? (cfg.apiKeyEnv ? process.env[cfg.apiKeyEnv] : undefined);
+  const t0 = Date.now();
+  if (!key) return { ok: false, text: "", error: "缺少 API Key(环境变量 " + (cfg.apiKeyEnv ?? "?") + ")", ms: 0, inputTokens: 0, outputTokens: 0 };
+  const messages: Array<{ role: string; content: string }> = [];
+  if (system) messages.push({ role: "system", content: system });
+  messages.push({ role: "user", content: user });
+  const body: Record<string, unknown> = { model: cfg.model, messages, temperature: cfg.temperature ?? 0, max_tokens: cfg.maxTokens ?? 400 };
+  if (cfg.jsonMode) body.response_format = { type: "json_object" };
+  try {
+    const res = await fetch(cfg.url, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + key }, body: JSON.stringify(body) });
+    const ms = Date.now() - t0;
+    if (!res.ok) return { ok: false, text: "", error: "HTTP " + res.status + " " + (await res.text()).slice(0, 200), ms, inputTokens: 0, outputTokens: 0 };
+    const j = (await res.json()) as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+    return { ok: true, text: j.choices?.[0]?.message?.content ?? "", ms, inputTokens: j.usage?.prompt_tokens ?? 0, outputTokens: j.usage?.completion_tokens ?? 0 };
+  } catch (e) {
+    return { ok: false, text: "", error: String(e), ms: Date.now() - t0, inputTokens: 0, outputTokens: 0 };
+  }
+}
 export function makeRemoteAgent(cfg: RemoteConfig): Policy {
   const fetchImpl = cfg.fetchImpl ?? fetch;
   const stats = newRemoteStats();
