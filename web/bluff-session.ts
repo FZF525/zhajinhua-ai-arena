@@ -40,6 +40,8 @@ export interface BluffSession {
   state: BluffState;
   kinds: SeatKind[];
   agents: Array<ReturnType<typeof createAdaptiveAgent> | ReturnType<typeof createEvolvingAgent>>;
+  /** AI 学习平滑(存下来:视图函数要用,不能引用 create 的局部变量 —— 这正是早上 req 那类错) */
+  learnAlpha: number;
   /** LLM 座位(用到了才创建,不浪费一次调用) */
   llm: Array<ReturnType<typeof makeBluffLlmAgent> | null>;
   rng: ReturnType<typeof createRng>;
@@ -54,6 +56,8 @@ export interface BluffSessionOptions {
   challenge?: { win: number; fee: number; winsBonus: number };
   /** 撒谎成功奖励:一手谎话没人质疑 → 其他三家各付这么多分(零和)。默认 0.5(实测最均衡) */
   bluffBonus?: number;
+  /** AI 学习平滑:1 = 学得快(实测最活、夺冠最公平);6 = 慢(桌上几乎没人质疑)。默认 1 */
+  learnAlpha?: number;
 }
 
 /** 质疑规则预设:界面上只给三个选项 ✓ */
@@ -67,6 +71,7 @@ export function createBluffSession(opts: BluffSessionOptions): BluffSession {
   const { bust, kinds, seed, drawMode = "one" } = opts;
   const ch = opts.challenge ?? CHALLENGE_PRESETS.standard;
   const bluffBonus = Math.max(0, opts.bluffBonus ?? 0.5);
+  const learnAlpha = Math.max(1, opts.learnAlpha ?? 1);
   const cfg = { players: 4, handSize: 26, maxPlay: 5, bustCards: BLUFF_BUST_MODES[bust], rate: 1, handsPerMatch: 4, drawMode, challengeFee: Math.max(0, ch.fee), challengeWin: Math.max(0, ch.win), challengeWinsBonus: Math.max(0, ch.winsBonus), bluffBonus };
   const names = ["你", "左边", "对面", "右边"];
   const s = Math.floor((seed ?? Date.now()) % 100000);
@@ -74,8 +79,8 @@ export function createBluffSession(opts: BluffSessionOptions): BluffSession {
   const agents = [0, 1, 2, 3].map((seat) =>
     kinds[seat] === "Lynn"
       ? createEvolvingAgent(seat + 3)
-      : createAdaptiveAgent(kinds[seat] !== "human" && kinds[seat] !== "random" && BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] ? BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] : DEFAULT_EXCEL));
-  return { state, kinds, agents, llm: [null, null, null, null], rng: createRng(s * 7 + 1) };
+      : createAdaptiveAgent({ ...(kinds[seat] !== "human" && kinds[seat] !== "random" && BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] ? BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] : DEFAULT_EXCEL), learnAlpha }));
+  return { state, kinds, agents, learnAlpha, llm: [null, null, null, null], rng: createRng(s * 7 + 1) };
 }
 
 export interface BluffSeatView {
@@ -101,7 +106,7 @@ export interface BluffSeatView {
   lastScores: number[];
   exhibition: { text: string; lines: string[] } | null;
   /** 当前质疑规则(常驻,便于界面显示)*/
-  challengeRule: { win: number; fee: number; winsBonus: number; bluffBonus: number };
+  challengeRule: { win: number; fee: number; winsBonus: number; bluffBonus: number; learnAlpha: number };
   /** **只有一盘结束时才出现** —— 盘中绝不泄露(谁质疑得准是隐藏信息)✓ */
   challengeReveal: { name: string; ledger: number; wins: number; bonus: number }[] | null;
   log: string[];
@@ -137,7 +142,7 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     bustedSeat: st.bustedSeat,
     lastScores: st.lastScores,
     exhibition: ex ? { text: lines.join(String.fromCharCode(10)), lines } : null,
-    challengeRule: { win: st.cfg.challengeWin ?? 0, fee: st.cfg.challengeFee ?? 0, winsBonus: st.cfg.challengeWinsBonus ?? 0, bluffBonus: st.cfg.bluffBonus ?? 0 },
+    challengeRule: { win: st.cfg.challengeWin ?? 0, fee: st.cfg.challengeFee ?? 0, winsBonus: st.cfg.challengeWinsBonus ?? 0, bluffBonus: st.cfg.bluffBonus ?? 0, learnAlpha: s.learnAlpha },
     challengeReveal: st.over
       ? (() => {
           const ev = [...st.events].reverse().find((x) => x.kind === "CHALLENGE_SETTLE") as { bonus: number[]; ledger: number[]; wins: number[] } | undefined;

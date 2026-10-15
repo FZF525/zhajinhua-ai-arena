@@ -611,3 +611,13 @@ test("BLUFF-24 账本透明度:revealed 模式只记「被质疑翻过」的那�
   assert.ok(rev.claims.length > rev.exhibition!.timeline.length, "revealed 模式:时间线必须少于申报总数(" + rev.exhibition!.timeline.length + " < " + rev.claims.length + ")");
   assert.ok(rev.exhibition!.timeline.every((c) => c.revealed), "时间线里的每一手都应当是被翻过的");
 });
+
+test("BLUFF-25 默认学习率是 1(实测:6 时桌上没人质疑)", () => {
+  assert.equal(DEFAULT_EXCEL.learnAlpha, 1, "默认必须是 1");
+  const st = newBluffGame({ ...DEFAULT_BLUFF_CONFIG, drawMode: "one" as const }, NAMES, 1201);
+  const a = createAdaptiveAgent();
+  // 记 3 手"报 5 张全假" → α=1 时后验应当迅速升高(而不是被平滑压住)
+  for (let i = 0; i < 3; i++) st.claims.push({ seat: 1, handNo: 1, claimedRank: st.roundRank, count: 5, honest: 0, revealed: true });
+  a.observeHand(st);
+  assert.deepEqual(a.statsFor(1, 5), { claims: 3, lies: 3 });
+});

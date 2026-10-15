@@ -24,7 +24,7 @@ function runCandidate(opts: BluffAiOptions, matches: number): { mean: number; sd
     for (let i = 0; i < 4; i++) if (rot(i) === 0) names[i] = "候选"; else names[i] = FIELD[(rot(i) - 1 + FIELD.length) % FIELD.length];
     const st = newBluffGame(CFG, names, 300000 + m);
     const rng = createRng(77 + m);
-    const agents = names.map((n) => createAdaptiveAgent(n === "候选" ? opts : { ...BLUFF_PERSONAS[n], learnAlpha: 6 }));
+    const agents = names.map((n) => createAdaptiveAgent(n === "候选" ? { ...opts, learnAlpha: SEARCH_ALPHA } : { ...BLUFF_PERSONAS[n], learnAlpha: SEARCH_ALPHA }));
     while (!st.over) {
       if (st.handOver) { for (const a of agents) a.observeHand(st); if (st.over) break; startHand(st); continue; }
       const seat = st.turn;
@@ -63,23 +63,28 @@ if (process.argv.includes("--verify")) {
   process.exit(0);
 }
 
+// --family=liar:只在"赌徒家族"里搜(门槛高=不主动质疑、贪心高、敢报满、诚实上限低)
+const SEARCH_ALPHA = Number((process.argv.find((x) => x.startsWith("--alpha=")) ?? "--alpha=1").split("=")[1]);
+const FAMILY = (process.argv.find((x) => x.startsWith("--family=")) ?? "--family=any").split("=")[1];
+
 const rnd = createRng(20260126);
 const r = (lo: number, hi: number) => lo + rnd.next() * (hi - lo);
 const cands: Array<{ opts: BluffAiOptions; tag: string }> = [
   // 手工版小针作为对照
   { opts: { ...BLUFF_PERSONAS.Xiaozhen }, tag: "手工小针(0.78/0/2/5/1.8)" },
   { opts: { ...BLUFF_PERSONAS.Nannan }, tag: "手工囡囡(0.80/0/1/3/2.0)" },
+  { opts: { ...BLUFF_PERSONAS.Lao6 }, tag: "手工赌徒 Lao6(0.35/0.6/5/5/1.1)" },
 ];
 for (let i = 0; i < N; i++) {
-  cands.push({
-    opts: { challengeAt: r(0.3, 0.9), greed: r(0, 0.6), maxLie: 1 + Math.floor(rnd.next() * 5), maxHonest: 3 + Math.floor(rnd.next() * 3), bustFear: r(1.0, 1.9), oppBluffSize: 1 + Math.floor(rnd.next() * 3) },
-    tag: "随机样本 " + (i + 1),
-  });
+  const o = FAMILY === "liar"
+    ? { challengeAt: r(0.6, 0.95), greed: r(0.4, 0.95), maxLie: 3 + Math.floor(rnd.next() * 3), maxHonest: 1 + Math.floor(rnd.next() * 3), bustFear: r(1.0, 1.6), oppBluffSize: 1 + Math.floor(rnd.next() * 3) }
+    : { challengeAt: r(0.3, 0.9), greed: r(0, 0.6), maxLie: 1 + Math.floor(rnd.next() * 5), maxHonest: 3 + Math.floor(rnd.next() * 3), bustFear: r(1.0, 1.9), oppBluffSize: 1 + Math.floor(rnd.next() * 3) };
+  cands.push({ opts: o, tag: "随机样本 " + (i + 1) });
 }
 
 const rows = cands.map((c) => ({ ...c, res: runCandidate(c.opts, M) }));
 rows.sort((a, b) => b.res.mean - a.res.mean);
-console.log("=== 性格发现:每组 " + M + " 盘,对手固定为 Bajiao/Nannan/Nizi(座位轮换)===");
+console.log("=== 性格发现 · 家族=" + FAMILY + " · α=" + SEARCH_ALPHA + " · 每组 " + M + " 盘 ===");
 console.log("  名次  参数(challengeAt/greed/maxLie/maxHonest/bustFear)         平均每盘  t 值   夺冠率  标签");
 rows.forEach((row, i) => {
   const o = row.opts;

@@ -103,6 +103,12 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
         <option value="1">1</option>
         <option value="2">2(重奖撒谎)</option>
       </select>
+      <label class="hint">AI 学习速度</label>
+      <select id="alphaSel">
+        <option value="1" selected>快(1 · 会上桌质疑)</option>
+        <option value="3">中(3 · 分差最小)</option>
+        <option value="6">慢(6 · 几乎不质疑)</option>
+      </select>
       <label class="hint">AI 出手速度</label>
       <select id="speedSel"><option value="900">慢(看得清)</option><option value="420" selected>中</option><option value="120">快</option><option value="0">不停顿</option></select>
       <button id="btnNew" class="primary">开新盘</button>
@@ -239,12 +245,12 @@ $('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); re
 $('speedSel').onchange = function () { schedule(); };
 $('btnNew').onclick = function () {
   var kinds = ['human', $('kind1').value, $('kind2').value, $('kind3').value];
-  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, bluff: Number($('bluffSel').value), seats: kinds }).then(function (r) {
+  api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, bluff: Number($('bluffSel').value), alpha: Number($('alphaSel').value), seats: kinds }).then(function (r) {
     if (!r.ok) { toast(r.error); return; }
     view = r.view; sel.clear(); render(); schedule();
   });
 };
-api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, bluff: Number($('bluffSel').value), seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
+api('/api/bluff/new', { bust: $('bustSel').value, draw: $('drawSel').value, challenge: $('chalSel').value, bluff: Number($('bluffSel').value), alpha: Number($('alphaSel').value), seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
   .then(function (r) { if (r.ok) { view = r.view; render(); schedule(); } })
   .catch(function () { });
 </script>

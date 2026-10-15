@@ -36,6 +36,9 @@ export interface BluffAiOptions {
 
 export const DEFAULT_EXCEL: BluffAiOptions = {
   challengeAt: 0.55, maxLie: 2, maxHonest: 5, greed: 0.1, bustFear: 1.6, oppBluffSize: 1,
+  // 学习平滑:6 时新证据被压住 → 估计值够不到盈亏平衡点 → 桌上没人质疑(实测 0.8 次/局)
+  // 改成 1 后质疑升到 3.3 次/局,夺冠率偏离只剩 5(四人几乎各 25%)✓
+  learnAlpha: 1,
 };
 
 /** 四位 AI 的名字(作者命名):Lao6 赌徒 / Bajiao 标准 / Nizi 试探 / Nannan 老实人 */
@@ -183,7 +186,7 @@ export interface AdaptiveAgent {
 
 export function createAdaptiveAgent(opts: BluffAiOptions = DEFAULT_EXCEL): AdaptiveAgent {
   const stats: Array<Map<number, { claims: number; lies: number }>> = [];
-  const alpha = Math.max(1, opts.learnAlpha ?? 6);
+  const alpha = Math.max(1, opts.learnAlpha ?? 1);
   return {
     opts,
     statsFor(seat: number, k: number) {
