@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createDeck } from "../src/cards.ts";
 import type { Card } from "../src/cards.ts";
 import { createRng } from "../src/rng.ts";
-import { DEFAULT_BLUFF_CONFIG, createBluffGame, cardCount, rankOf, isHonestCard } from "../src/games/bluff/state.ts";
+import { DEFAULT_BLUFF_CONFIG, BLUFF_BUST_MODES, createBluffGame, cardCount, rankOf, isHonestCard, describeExhibition } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand } from "../src/games/bluff/rules.ts";
 import { createAdaptiveAgent, DEFAULT_EXCEL } from "../src/games/bluff/ai.ts";
@@ -12,6 +12,19 @@ import { createAdaptiveAgent, DEFAULT_EXCEL } from "../src/games/bluff/ai.ts";
 const NAMES = ["A", "B", "C", "D"];
 function fresh(seed = 7): BluffState {
   return newBluffGame(DEFAULT_BLUFF_CONFIG, NAMES, seed);   // 工厂自带发牌,别再手动 startHand(会多打一局)
+}
+
+/** 从其余各家凑牌,把某座位补到 target 张(单家可能不够,比如要顶到 52 张时) */
+function topUp(st: BluffState, seat: number, target: number): boolean {
+  let need = target - st.seats[seat].hand.length;
+  for (const p of st.seats) {
+    if (p.seat === seat || need <= 0) continue;
+    // 给每家至少留 1 张:抽光了会误触「出空赢」的提前返回(真实对局不会这样,纯测试构造问题)
+    const take = Math.min(need, Math.max(0, p.hand.length - 1));
+    st.seats[seat].hand.push(...p.hand.splice(0, take));
+    need -= take;
+  }
+  return need === 0;
 }
 
 /** 安全换手牌:把指定 id 的牌换到某座位(总量不变,不会重复) */
@@ -274,4 +287,64 @@ test("BLUFF-12 自适应对手模型:看到谎话后要记账,而且学会质疑
       assert.equal(act.type, "CHALLENGE", "对 100% 撒谎的对手,报了 5 张就该抓");
     }
   }
+});
+
+test("BLUFF-13 两种爆牌线(40 / 52)都按各自阈值生效", () => {
+  assert.equal(BLUFF_BUST_MODES.tight, 40);
+  assert.equal(BLUFF_BUST_MODES.loose, 52);
+  for (const [mode, limit] of Object.entries(BLUFF_BUST_MODES)) {
+    const cfg = { ...DEFAULT_BLUFF_CONFIG, bustCards: limit };
+    const st = newBluffGame(cfg, NAMES, 301);
+    // 把当前行动者的牌堆到 limit 张(正好等于阈值,不该爆)
+    const seat = st.turn;
+    assert.equal(topUp(st, seat, limit), true, mode + ": 应当能凑到 " + limit + " 张");
+    assert.equal(st.seats[seat].hand.length, limit, mode + ": 应当正好 " + limit + " 张");
+    const trig = st.turn;
+    play(st, trig, [st.seats[trig].hand[0].id]);
+    assert.equal(st.handOver, false, mode + ": 正好等于阈值不该爆(规则是超过才爆)");
+    // 补到 limit + 1(注意:刚出过一张,手牌已经少 1)→ 出牌后结算时越线 → 爆
+    // 注意①:前面那一手已经推进了轮次 → 必须重新取当前行动者(这是我写测试时的第一版错)
+    // 注意②:爆牌判定在**出牌之后**,而出牌让手牌再减 1 → 要补到 limit + 2
+    const trig2 = st.turn;
+    assert.ok(limit + 2 > st.seats[trig2].hand.length, mode + ": 前置应当还差至少 1 张");
+    assert.equal(topUp(st, trig2, limit + 2), true, mode + ": 应当能凑到 " + (limit + 2) + " 张");
+    assert.equal(st.seats[trig2].hand.length, limit + 2, mode + ": 补到 " + (limit + 2) + " 张");
+    play(st, trig2, [st.seats[trig2].hand[0].id]);
+    assert.equal(st.seats[trig2].hand.length, limit + 1, mode + ": 出牌后应当是 " + (limit + 1) + " 张");
+    assert.equal(st.handOver, true, mode + ": 超过 " + limit + " 张应当爆牌");
+  }
+});
+
+test("BLUFF-14 局末牌堆不计分:只做展览,分数只按手牌数算", () => {
+  const st = fresh(401);
+  const seat = st.turn;
+  // 让三个人各出几张堆着,没人质疑 → 局末牌堆非空
+  for (let i = 0; i < 3 && !st.handOver; i++) {
+    const q = st.seats[st.turn];
+    play(st, st.turn, [q.hand[0].id]);
+  }
+  assert.ok(st.pile.length > 0, "前置:牌堆应当非空,实际 " + st.pile.length);
+  const pileBefore = st.pile.length;
+  const handsBefore = st.seats.map((p) => p.hand.length);
+  // 造结束:把某家顶到 41 张
+  // 补到 42:出掉 1 张后剩 41 > 40 → 结算时爆(爆牌判定在出牌之后)
+  const trig = st.turn;
+  assert.equal(topUp(st, trig, 42), true, "应当能凑到 42 张");
+  assert.ok(st.seats[trig].hand.length > 41, "前置:应当 > 41 张");
+  play(st, trig, [st.seats[trig].hand[0].id]);
+  assert.equal(st.handOver, true, "应当结束");
+  const ex = st.exhibition!;
+  assert.ok(ex, "应当生成展览");
+  assert.ok(ex.pileSize > 0, "局末牌堆非空,应当被展览记录: " + ex.pileSize);
+  // 关键:牌堆那些牌没有进任何人的手牌(「不计分」的前提 = 守恒)
+  // 用模块自己的 cardCount(手牌 + 牌堆 + 待判定)—— 手搓会漏掉待判定区,我因此错过一次
+  assert.equal(cardCount(st), 26 * 4, "全副 104 张:手牌 + 牌堆 + 待判定 = 104");
+  assert.equal(handsBefore.length, 4);
+  // 分数只跟手牌数有关:分数越高的人,剩牌越少
+  const sorted = st.seats.map((p, i) => ({ i, hand: p.hand.length, sc: st.lastScores[i] })).sort((a, b) => b.sc - a.sc);
+  assert.ok(sorted[0].hand <= sorted[sorted.length - 1].hand, "分最高的应当剩牌最少(牌堆不参与计分)");
+  const text = describeExhibition(st);
+  assert.ok(text.includes("本局展览"), "展览要能渲染成文本: " + text.slice(0, 40));
+  assert.ok(text.includes("假牌"), "文本里要有谎话统计");
+  assert.equal(st.lastScores.reduce((a, b) => a + b, 0), 0, "仍然零和");
 });

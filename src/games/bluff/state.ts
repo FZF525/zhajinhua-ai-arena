@@ -16,6 +16,10 @@ export interface BluffConfig {
   handsPerMatch: number;
 }
 
+/** 两种爆牌线(作者定的两种玩法):紧 = 40 张,松 = 52 张(= 两副手牌量)*/
+export const BLUFF_BUST_MODES = { tight: 40, loose: 52 } as const;
+export type BluffBustMode = keyof typeof BLUFF_BUST_MODES;
+
 export const DEFAULT_BLUFF_CONFIG: BluffConfig = {
   players: 4, handSize: 26, maxPlay: 5, bustCards: 40, rate: 1, handsPerMatch: 4,
 };
@@ -116,6 +120,21 @@ export function cardCount(st: BluffState): number {
 }
 
 /** 只公开张数的信息(UI/日志/对手建模都能用) */
+/** 把局末展览渲染成多行文本(纯日志展示,不计分) */
+export function describeExhibition(st: BluffState): string {
+  const ex = st.exhibition;
+  if (!ex) return "本局没有展览";
+  const lines: string[] = [];
+  lines.push("本局展览(不计分):牌堆 " + ex.pileSize + " 张");
+  const ranks = Object.entries(ex.pileOf).map(([r, n]) => rankText(Number(r)) + "×" + n).join(" ");
+  lines.push("  牌堆真容: " + (ranks || "(空)"));
+  for (const p of ex.perSeat) {
+    lines.push("  " + p.name + ": 报了 " + p.claims + " 手 / 出 " + p.cards + " 张,其中假牌 " + p.lies +
+      " 张(最大一谎 " + p.biggestLie + " 张)");
+  }
+  return lines.join(String.fromCharCode(10));
+}
+
 export function publicView(st: BluffState) {
   return {
     handNo: st.handNo,
