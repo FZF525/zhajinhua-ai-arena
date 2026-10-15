@@ -208,3 +208,68 @@ export function pickBestCandidate(st: BluffState, seat: number): number {
   }
   return best;
 }
+// ============ Lynn:自进化(读对手 + 调自己)============
+//
+// 两条进化轴:
+//  ① 读对手:复用自适应模型(从局末账本学每个人的真实撒谎率)—— 这部分白拿 ✓
+//  ② 调自己:每打完一盘,按得分对自己的参数做一次 (1+1)-ES 式的「留优弃劣」
+//     参数 = challengeAt / greed / maxLie / maxHonest / bustFear
+// 不背表格、不堆策略类:炸金花的教训是「瓶颈在策略类」,所以这里只做低维自适应 ✓
+export interface EvolvingAgent {
+  name: string;
+  opts: BluffAiOptions;
+  generation: number;
+  bestScore: number;
+  decide(st: BluffState, seat: number, rng?: Rng): BluffAction;
+  observeHand(st: BluffState): void;
+  /** 一盘结束时报告本盘得分 → 决定保留还是回退这次变异 */
+  endMatch(score: number): void;
+  statsFor(seat: number, k: number): { claims: number; lies: number };
+}
+
+function mutateOpts(o: BluffAiOptions, rng: Rng): BluffAiOptions {
+  const out = { ...o };
+  const which = Math.floor(rng.next() * 5);
+  const step = (v: number, lo: number, hi: number, d: number) => Math.max(lo, Math.min(hi, v + (rng.next() < 0.5 ? -d : d)));
+  if (which === 0) out.challengeAt = step(o.challengeAt, 0.2, 0.9, 0.08);
+  if (which === 1) out.greed = step(o.greed, 0, 0.9, 0.1);
+  if (which === 2) out.maxLie = Math.max(1, Math.min(5, Math.round(step(o.maxLie, 1, 5, 1))));
+  if (which === 3) out.maxHonest = Math.max(1, Math.min(5, Math.round(step(o.maxHonest, 1, 5, 1))));
+  if (which === 4) out.bustFear = step(o.bustFear, 1, 3, 0.25);
+  return out;
+}
+
+/** 本地小 RNG(避免为一个种子引依赖) */
+function createRngLocal(seed: number): Rng {
+  let s = (seed >>> 0) || 1;
+  return { next() { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; } } as Rng;
+}
+
+export function createEvolvingAgent(seed = 1, rngIn?: Rng): EvolvingAgent {
+  const rng = rngIn ?? createRngLocal(seed);
+  let opts: BluffAiOptions = { ...DEFAULT_EXCEL };
+  let agent = createAdaptiveAgent(opts);
+  let bestScore = -Infinity;
+  let pending: BluffAiOptions | null = null;
+  const self: EvolvingAgent = {
+    name: "Lynn",
+    get opts() { return opts; },
+    generation: 0,
+    get bestScore() { return bestScore; },
+    decide: (st: BluffState, seat: number, r = rng) => agent.decide(st, seat, r),
+    observeHand: (st: BluffState) => agent.observeHand(st),
+    statsFor: (seat: number, k: number) => agent.statsFor(seat, k),
+    endMatch(score: number) {
+      // 更好 → 保留这次变异(代数 +1);更差 → 回退到旧参数
+      if (score >= bestScore) {
+        bestScore = score;
+        if (pending) { opts = pending; self.generation += 1; }
+      }
+      // 无论留还是退,都重建自适应模型(每盘重建是这套 AI 的规矩)
+      agent = createAdaptiveAgent(opts);
+      pending = mutateOpts(opts, rng);
+    },
+  };
+  pending = mutateOpts(opts, rng);
+  return self;
+}

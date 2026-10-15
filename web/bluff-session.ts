@@ -9,7 +9,7 @@ import { cardText } from "../src/cards.ts";
 import { BLUFF_BUST_MODES, describeExhibition, isHonestCard, publicView, rankOf, rankText } from "../src/games/bluff/state.ts";
 import type { BluffBustMode, BluffState } from "../src/games/bluff/state.ts";
 import { legalActions, newBluffGame, startHand, play, challenge } from "../src/games/bluff/rules.ts";
-import { BLUFF_PERSONAS, DEFAULT_EXCEL, createAdaptiveAgent, randomDecide } from "../src/games/bluff/ai.ts";
+import { BLUFF_PERSONAS, DEFAULT_EXCEL, createAdaptiveAgent, createEvolvingAgent, randomDecide } from "../src/games/bluff/ai.ts";
 import { makeBluffLlmAgent } from "../src/games/bluff/llm.ts";
 import type { BluffAction } from "../src/games/bluff/legal.ts";
 import { describeBluffLog } from "../src/games/bluff/format.ts";
@@ -19,10 +19,10 @@ import { createDeck } from "../src/cards.ts";
 /** 用整副牌查出每张牌的完整信息(花色 emoji / 色系) */
 const deckById = new Map(createDeck().map((c) => [c.id, c]));
 
-export type SeatKind = "human" | "random" | keyof typeof BLUFF_PERSONAS | "llm:glm" | "llm:ds";
+export type SeatKind = "human" | "random" | "Lynn" | keyof typeof BLUFF_PERSONAS | "llm:glm" | "llm:ds";
 
 /** 座位类型白名单(前端传来的东西一律过滤) */
-const KINDS: string[] = ["human", "random", ...Object.keys(BLUFF_PERSONAS), "llm:glm", "llm:ds"];
+const KINDS: string[] = ["human", "random", "Lynn", ...Object.keys(BLUFF_PERSONAS), "llm:glm", "llm:ds"];
 /** 解析座位类型;未知值**不静默降级**(会被前端当成"点了没反应"),而是报出来 */
 export function parseSeatKinds(raw: unknown): { kinds: SeatKind[]; bad: string[] } {
   const arr = Array.isArray(raw) ? raw : [];
@@ -39,7 +39,7 @@ export function parseSeatKinds(raw: unknown): { kinds: SeatKind[]; bad: string[]
 export interface BluffSession {
   state: BluffState;
   kinds: SeatKind[];
-  agents: Array<ReturnType<typeof createAdaptiveAgent>>;
+  agents: Array<ReturnType<typeof createAdaptiveAgent> | ReturnType<typeof createEvolvingAgent>>;
   /** LLM 座位(用到了才创建,不浪费一次调用) */
   llm: Array<ReturnType<typeof makeBluffLlmAgent> | null>;
   rng: ReturnType<typeof createRng>;
@@ -50,7 +50,10 @@ export function createBluffSession(bust: BluffBustMode, kinds: SeatKind[], seed?
   const names = ["你", "左边", "对面", "右边"];
   const s = Math.floor((seed ?? Date.now()) % 100000);
   const state = newBluffGame(cfg, names, s);
-  const agents = [0, 1, 2, 3].map((seat) => createAdaptiveAgent(kinds[seat] !== "human" && kinds[seat] !== "random" ? BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] : DEFAULT_EXCEL));
+  const agents = [0, 1, 2, 3].map((seat) =>
+    kinds[seat] === "Lynn"
+      ? createEvolvingAgent(seat + 3)
+      : createAdaptiveAgent(kinds[seat] !== "human" && kinds[seat] !== "random" && BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] ? BLUFF_PERSONAS[kinds[seat] as keyof typeof BLUFF_PERSONAS] : DEFAULT_EXCEL));
   return { state, kinds, agents, llm: [null, null, null, null], rng: createRng(s * 7 + 1) };
 }
 
@@ -209,4 +212,11 @@ export async function bluffRunAiOne(s: BluffSession): Promise<{ acted: boolean; 
   const r = action.type === "PLAY" ? play(st, action.seat, action.cardIds) : challenge(st, action.seat);
   if (!r.ok) return { acted: false, waitingHuman: false, handEnded: st.handOver };
   return { acted: true, waitingHuman: s.kinds[st.turn] === "human", handEnded: st.handOver };
+}
+/** 一盘结束时把得分告诉自进化的 Lynn(它据此保留/回退自己的参数变异)*/
+function notifyMatchEnd(s: BluffSession): void {
+  s.state.seats.forEach((p, seat) => {
+    const ag = s.agents[seat] as { endMatch?: (score: number) => void };
+    if (typeof ag.endMatch === "function") ag.endMatch(p.points);
+  });
 }

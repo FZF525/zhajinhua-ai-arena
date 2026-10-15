@@ -7,7 +7,7 @@ import { createRng } from "../src/rng.ts";
 import { DEFAULT_BLUFF_CONFIG, BLUFF_BUST_MODES, createBluffGame, cardCount, rankOf, isHonestCard, describeExhibition } from "../src/games/bluff/state.ts";
 import type { BluffState } from "../src/games/bluff/state.ts";
 import { newBluffGame, startHand, play, challenge, legalActions, checkBluffInvariants, settleHand } from "../src/games/bluff/rules.ts";
-import { createAdaptiveAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
+import { createAdaptiveAgent, createEvolvingAgent, DEFAULT_EXCEL, pickBestCandidate } from "../src/games/bluff/ai.ts";
 
 const NAMES = ["A", "B", "C", "D"];
 function fresh(seed = 7): BluffState {
@@ -413,4 +413,31 @@ test("BLUFF-17 pickBestCandidate 会挑「手里真牌最多」的那个候选",
   const counts = st.candidates.map((r) => ({ r, n: st.seats[seat].hand.filter((c) => isHonestCard(c, r, st.wildRank)).length }));
   const maxN = Math.max(...counts.map((x) => x.n));
   assert.equal(counts.find((x) => x.r === best)!.n, maxN, "应当挑真牌最多的候选: " + JSON.stringify(counts));
+});
+
+test("BLUFF-18 Lynn 自进化:能决策、能读账本、一盘结束后能留优弃劣", () => {
+  const st = newBluffGame({ ...DEFAULT_BLUFF_CONFIG, drawMode: "choose3" as const }, ["Lynn", "Bajiao", "Nizi", "Nannan"], 701);
+  const lynn = createEvolvingAgent(11);
+  assert.equal(lynn.name, "Lynn");
+  assert.equal(lynn.generation, 0);
+  const before = { ...lynn.opts };
+  // 打几手,全部合法
+  for (let i = 0; i < 12 && !st.handOver; i++) {
+    const seat = st.turn;
+    if (st.seats[seat].name !== "Lynn") { const q = st.seats[seat]; play(st, seat, q.hand.slice(0, 1).map((c) => c.id)); continue; }
+    const act = lynn.decide(st, seat);
+    const r = act.type === "PLAY" ? play(st, seat, act.cardIds, act.declaredRank) : challenge(st, seat);
+    assert.equal(r.ok, true, "Lynn 的动作必须合法: " + r.error);
+  }
+  // 上报一盘得分:连续两次更好 → 代数增长(说明它确实在按结果进化)
+  lynn.endMatch(10);
+  lynn.endMatch(20);
+  assert.ok(lynn.generation >= 1, "表现更好时应当保留变异(代数增长),实际 " + lynn.generation);
+  assert.ok(typeof lynn.opts.challengeAt === "number" && lynn.opts.challengeAt >= 0.2 && lynn.opts.challengeAt <= 0.9, "参数必须留在合法范围");
+  // 变差 → 不应继续涨代数(回退)
+  const genBefore = lynn.generation;
+  lynn.endMatch(-999);
+  assert.ok(lynn.generation >= genBefore, "回退不该让代数倒退");
+  assert.equal(lynn.bestScore, 20, "最好成绩要记住");
+  assert.ok(before.challengeAt >= 0.2);
 });
