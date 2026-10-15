@@ -18,6 +18,7 @@ main { display:grid; grid-template-columns: 1fr 320px; gap:16px; padding:16px; a
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
 .turnbar { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
 .turnbar .who { font-size:19px; font-weight:600; }
+.banner { background:#0d1219; border:1px solid var(--line); border-left:3px solid var(--gold); border-radius:8px; padding:9px 13px; margin-bottom:12px; font-size:15px; }
 .seats { display:flex; gap:10px; flex-wrap:wrap; }
 .seat { border:1px solid var(--line); border-radius:10px; padding:8px 12px; min-width:120px; }
 .seat.active { border-color:var(--gold); box-shadow:0 0 0 2px rgba(216,166,87,.18); }
@@ -36,6 +37,7 @@ button { background:#222c3c; color:var(--fg); border:1px solid var(--line); bord
 button.primary { background:var(--gold); color:#191307; border-color:var(--gold); font-weight:700; }
 button.danger { border-color:var(--bad); color:var(--bad); }
 button:disabled { opacity:.4; cursor:default; }
+.log .now { color:var(--gold); font-weight:600; }
 .log { max-height:300px; overflow:auto; font:12px/1.7 ui-monospace,Consolas,monospace; color:var(--dim); white-space:pre-wrap; }
 .ex { white-space:pre-wrap; font:13px/1.8 ui-monospace,Consolas,monospace; color:#cfd8e3; }
 .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0; }
@@ -59,6 +61,7 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
       <span class="who" id="turnWho">-</span>
       <span class="hint" id="turnHint"></span>
     </div>
+    <div class="banner" id="banner">-</div>
     <div class="seats" id="seats"></div>
     <div class="hand" id="hand"></div>
     <div class="btns">
@@ -67,21 +70,22 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
       <button id="btnNext" style="display:none">下一局</button>
     </div>
     <div class="row">
-      <label class="hint">当前玩家座位:</label>
-      <select id="seatSel"><option value="0">0 · 你</option><option value="1">1 · 左边</option><option value="2">2 · 对面</option><option value="3">3 · 右边</option></select>
-      <label class="hint" style="margin-left:auto">爆牌线:</label>
+      <label class="hint">你在座位</label>
+      <select id="seatSel"><option value="0">0 · 我</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+      <label class="hint">对家1</label>
+      <select id="kind1"><option value="Lao6">Lao6 老六</option><option value="Bajiao" selected>Bajiao 芭蕉</option><option value="Nizi">Nizi 妮子</option><option value="Nannan">Nannan 囡囡</option><option value="random">随机</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
+      <label class="hint">对家2</label>
+      <select id="kind2"><option value="Lao6">Lao6 老六</option><option value="Bajiao">Bajiao 芭蕉</option><option value="Nizi" selected>Nizi 妮子</option><option value="Nannan">Nannan 囡囡</option><option value="random">随机</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
+      <label class="hint">对家3</label>
+      <select id="kind3"><option value="Lao6">Lao6 老六</option><option value="Bajiao">Bajiao 芭蕉</option><option value="Nizi">Nizi 妮子</option><option value="Nannan" selected>Nannan 囡囡</option><option value="random">随机</option><option value="llm:glm">GLM</option><option value="llm:ds">DeepSeek</option></select>
+    </div>
+    <div class="row">
+      <label class="hint">爆牌线</label>
       <select id="bustSel"><option value="tight">40(火爆局)</option><option value="loose">52(技术局)</option></select>
-      <label class="hint">你对家:</label>
-      <select id="kindSel">
-        <option value="Bajiao">Bajiao(芭蕉 · 标准)</option>
-        <option value="Lao6">Lao6(老六 · 赌徒)</option>
-        <option value="Nizi">Nizi(妮子 · 多疑)</option>
-        <option value="Nannan">Nannan(囡囡 · 老实人)</option>
-        <option value="random">随机</option>
-        <option value="llm:glm">GLM(需 GLM_API_KEY)</option>
-        <option value="llm:ds">DeepSeek(需 DS_API_KEY)</option>
-      </select>
-      <button id="btnNew">开新盘</button>
+      <label class="hint">AI 出手速度</label>
+      <select id="speedSel"><option value="900">慢(看得清)</option><option value="420" selected>中</option><option value="120">快</option><option value="0">不停顿</option></select>
+      <button id="btnNew" class="primary">开新盘</button>
+      <span class="hint" id="paceHint"></span>
     </div>
     <div class="hint">提示:选中牌后点「出牌」= 宣告这几张都是本回合点数(可以撒谎 ✓);癞子可当任意点数 ✓</div>
   </section>
@@ -94,39 +98,36 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
 </main>
 <div id="toast"></div>
 <script>
-var view = null, sel = new Set(), seat = 0;
+var view = null, sel = new Set(), seat = 0, busy = false, timer = null;
 function $(id) { return document.getElementById(id); }
-function toast(msg) { var t = $('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2200); }
+function toast(msg) { var t = $('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2600); }
+function esc(s) { return String(s).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }); }
 function api(path, body) {
   return fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined)
     .then(function (r) {
-      // 关键:以前这里不管状态码直接 r.json() —— 404/HTML 会抛异常,而异常被 Promise 吞掉
-      // 于是页面上表现成「点了没反应」(炸金花阶段也踩过同族的坑:失败被渲染成别的意思)
-      if (!r.ok) throw new Error('接口 ' + path + ' 返回 HTTP ' + r.status + (r.status === 404 ? '(服务端可能是旧进程/页面是旧缓存,请重启服务端并 Ctrl+F5)' : ''));
+      if (!r.ok) throw new Error('接口 ' + path + ' 返回 HTTP ' + r.status + (r.status === 404 ? '(服务端可能是旧进程 / 页面是旧缓存,请重启服务端并 Ctrl+F5)' : ''));
       return r.json();
     })
-    .catch(function (e) {
-      console.error('[bluff]', e);
-      toast(String(e.message || e));
-      throw e;
-    });
+    .catch(function (e) { console.error('[bluff]', e); toast(String(e.message || e)); throw e; });
 }
 function render() {
   if (!view) return;
   $('handNo').textContent = view.handNo; $('matchNo').textContent = view.matchNo;
   $('wild').textContent = view.wildText; $('rank').textContent = view.roundText;
   $('pile').textContent = view.pileCount;
-  $('bustMode').textContent = $('bustSel').value === 'loose' ? '爆牌线 52' : '爆牌线 40';
-  var who = view.seats[view.turn];
-  $('turnWho').textContent = (view.turn === seat ? '轮到你' : '轮到 ' + who.name) + (view.pending ? '(' + who.name + ' 刚报了 ' + view.pending.count + ' 张)' : '');
-  $('turnHint').textContent = view.handOver ? '本局结束' : '手牌 ' + view.seats[seat].cards + ' 张';
+  $('bustMode').textContent = ($('bustSel').value === 'loose' ? '爆牌线 52' : '爆牌线 40');
+  var mine = view.turn === seat;
+  $('turnWho').textContent = view.over ? '一盘结束' : (view.handOver ? '本局结束' : (mine ? '轮到你' : '轮到 ' + view.seats[view.turn].name));
+  $('turnHint').textContent = view.over ? '' : ('我的手牌 ' + view.seats[seat].cards + ' 张');
+  var last = view.log.length ? view.log[view.log.length - 1] : '';
+  $('banner').textContent = last || '-';
   $('seats').innerHTML = view.seats.map(function (s) {
-    return '<div class="seat ' + (s.seat === view.turn ? 'active' : '') + '"><div class="n">' + s.name + '</div>' +
-      '<div class="c">' + s.cards + ' 张 · ' + s.points + ' 分</div><div class="c">' + s.kind + '</div></div>';
+    return '<div class="seat ' + (s.seat === view.turn ? 'active' : '') + '"><div class="n">' + esc(s.name) + (s.seat === seat ? ' (我)' : '') + '</div>' +
+      '<div class="c">' + s.cards + ' 张 · ' + s.points + ' 分</div><div class="c">' + esc(s.kind) + '</div></div>';
   }).join('');
   $('hand').innerHTML = view.hand.map(function (c) {
     var cls = 'card small ' + (c.family ? c.family.toLowerCase() : '') + (c.honest ? ' honest' : '') + (sel.has(c.id) ? ' sel' : '');
-    return '<div class="' + cls + '" data-id="' + c.id + '" title="' + (c.honest ? '这张能当本回合点数(真话)' : '这张是假话素材') + '">' + c.text + '</div>';
+    return '<div class="' + cls + '" data-id="' + c.id + '" title="' + (c.honest ? '能当本回合点数(真话素材)' : '假话素材') + '">' + c.text + '</div>';
   }).join('');
   Array.prototype.forEach.call(document.querySelectorAll('.card'), function (el) {
     el.onclick = function () {
@@ -135,33 +136,56 @@ function render() {
       render();
     };
   });
-  var myTurn = view.turn === seat && !view.handOver && !view.over;
-  $('btnPlay').disabled = !myTurn || sel.size < 1;
-  $('btnPlay').textContent = '出牌(' + sel.size + ' 张报 ' + view.roundText + ')';
-  $('btnChal').disabled = !myTurn || !view.legal.canChallenge;
+  var canAct = mine && !view.handOver && !view.over;
+  $('btnPlay').disabled = !canAct || sel.size < 1;
+  $('btnPlay').textContent = '出牌(' + sel.size + ' 张,报全是 ' + view.roundText + ')';
+  $('btnChal').disabled = !canAct || !view.legal.canChallenge;
   $('btnNext').style.display = view.handOver && !view.over ? 'inline-block' : 'none';
   $('ex').textContent = view.exhibition ? view.exhibition.text : '(打到这里会翻开牌堆真容 + 每人的谎话账本)';
-  $('log').textContent = view.log.join(String.fromCharCode(10));
+  $('log').innerHTML = view.log.map(function (t, i) {
+    return '<div class="' + (i === view.log.length - 1 ? 'now' : '') + '">' + esc(t) + '</div>';
+  }).join('');
+  $('banner').textContent = last ? last : '-';
 }
-function refresh() { return api('/api/bluff/state?seat=' + seat).then(function (r) { if (r.ok) { view = r.view; render(); } }); }
+async function tick() {
+  if (busy || !view) return;
+  if (view.over || view.handOver) { render(); return; }
+  if (view.turn === seat) { render(); return; }
+  busy = true;
+  try {
+    var r = await api('/api/bluff/step', { seat: seat });
+    if (r.ok) { view = r.view; render(); }
+  } catch (e) { /* api 已经提示过了 */ }
+  finally { busy = false; }
+  schedule();
+}
+function schedule() { clearTimeout(timer); var d = Number($('speedSel').value); timer = setTimeout(tick, isFinite(d) ? d : 400); }
+function refreshOnce() { return api('/api/bluff/state?seat=' + seat).then(function (r) { if (r.ok) { view = r.view; render(); } }); }
 $('btnPlay').onclick = function () {
   api('/api/bluff/action', { seat: seat, type: 'PLAY', cardIds: Array.from(sel) }).then(function (r) {
-    if (!r.ok) toast(r.error); else { sel.clear(); view = r.view; render(); }
+    if (!r.ok) { toast(r.error); return; }
+    sel.clear(); view = r.view; render(); schedule();
   });
 };
 $('btnChal').onclick = function () {
   api('/api/bluff/action', { seat: seat, type: 'CHALLENGE' }).then(function (r) {
-    if (!r.ok) toast(r.error); else { view = r.view; render(); }
+    if (!r.ok) { toast(r.error); return; }
+    view = r.view; render(); schedule();
   });
 };
-$('btnNext').onclick = function () { api('/api/bluff/action', { seat: seat, type: 'NEXT' }).then(function (r) { if (r.ok) { view = r.view; render(); } }); };
-$('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); refresh(); };
+$('btnNext').onclick = function () { api('/api/bluff/action', { seat: seat }).then(function (r) { if (r.ok) { view = r.view; render(); schedule(); } }); };
+$('seatSel').onchange = function () { seat = Number(this.value); sel.clear(); refreshOnce().then(schedule); };
+$('speedSel').onchange = function () { schedule(); };
 $('btnNew').onclick = function () {
-  var kinds = ['human', $('kindSel').value, $('kindSel').value, $('kindSel').value];
-  api('/api/bluff/new', { bust: $('bustSel').value, seats: kinds }).then(function (r) { if (r.ok) { view = r.view; sel.clear(); render(); } });
+  var kinds = ['human', $('kind1').value, $('kind2').value, $('kind3').value];
+  api('/api/bluff/new', { bust: $('bustSel').value, seats: kinds }).then(function (r) {
+    if (!r.ok) { toast(r.error); return; }
+    view = r.view; sel.clear(); render(); schedule();
+  });
 };
-api('/api/bluff/new', { bust: 'tight', seats: ['human', 'standard', 'standard', 'standard'] }).then(function (r) { if (r.ok) { view = r.view; render(); } });
-setInterval(refresh, 1500);
+api('/api/bluff/new', { bust: 'tight', seats: ['human', $('kind1').value, $('kind2').value, $('kind3').value] })
+  .then(function (r) { if (r.ok) { view = r.view; render(); schedule(); } })
+  .catch(function () { });
 </script>
 </body>
 </html>

@@ -41,13 +41,20 @@ test("BLUFF-WEB-01 真起服务打几手唬牌(含展览面板与切换爆牌线
         await fetch(BASE + "/api/bluff/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ seat: 0 }) });
         continue;
       }
-      const myTurn = st.view.turn === 0;
-      if (!myTurn) { continue; }
+      if (st.view.turn !== 0) {
+        // 不是我的回合 → 推进一步,让 AI 慢慢走(新流程:服务端不再一口气跑完)
+        const sres = await (await fetch(BASE + "/api/bluff/step", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ seat: 0 }) })).json();
+        assert.equal(sres.ok, true, "step 必须成功: " + JSON.stringify(sres));
+        continue;
+      }
       const body = st.view.legal.canChallenge && i % 5 === 4
         ? { seat: 0, type: "CHALLENGE" }
         : { seat: 0, type: "PLAY", cardIds: st.view.hand.slice(0, Math.min(2, st.view.hand.length)).map((c: { id: string }) => c.id) };
       const r = await (await fetch(BASE + "/api/bluff/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
       assert.equal(r.ok, true, "动作应当被接受: " + JSON.stringify(r));
+      // 出完牌后再推一步,确保 AI 会跟上(而不是靠 action 顺带跑完)
+      const after = await (await fetch(BASE + "/api/bluff/step", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ seat: 0 }) })).json();
+      assert.equal(after.ok, true);
     }
     const last = await (await fetch(BASE + "/api/bluff/state?seat=0")).json();
     assert.equal(last.ok, true);

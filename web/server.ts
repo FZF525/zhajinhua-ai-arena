@@ -22,7 +22,7 @@ import type { Recording } from "../src/replay.ts";
 import { saveReplay, listReplays, loadReplay, deleteReplay, replaysDir, pruneReplays } from "../src/store.ts";
 import { ENGINE_VERSION } from "../src/version.ts";
 import { actorOf, buildView, viewerSeatFor } from "./view.ts";
-import { createBluffSession, bluffSeatView, bluffApply, bluffRunAi, bluffRunAiAsync, parseSeatKinds } from "./bluff-session.ts";
+import { createBluffSession, bluffSeatView, bluffApply, bluffRunAiOne, parseSeatKinds } from "./bluff-session.ts";
 import type { BluffSession } from "./bluff-session.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -179,12 +179,17 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: false, error: "未知的座位类型:" + parsed.bad.join(",") + ";可选:" + ["human", "random", "Lao6", "Bajiao", "Nizi", "Nannan", "llm:glm", "llm:ds"].join("/") });
     }
     bluff = createBluffSession(bust, parsed.kinds);
-    await bluffRunAiAsync(bluff);
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, bluff.state.turn) });
+  }
+  if (path === "/api/bluff/step" && req.method === "POST") {
+    if (!bluff) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    const body = await readBody(req);
+    const seat = Math.max(0, Math.min(3, Number(body.seat ?? 0)));
+    const rr = await bluffRunAiOne(bluff);
+    return sendJson(res, 200, { ok: true, ...rr, view: bluffSeatView(bluff, seat) });
   }
   if (path === "/api/bluff/state") {
     if (!bluff) return sendJson(res, 200, { ok: false, error: "还没有开局" });
-    await bluffRunAiAsync(bluff);
     const seat = Math.max(0, Math.min(3, Number(url.searchParams.get("seat") ?? 0)));
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
   }
@@ -201,7 +206,6 @@ const server = http.createServer(async (req, res) => {
       const r = bluffApply(bluff, seat, action);
       if (!r.ok) return sendJson(res, 200, { ok: false, error: r.error });
     }
-    await bluffRunAiAsync(bluff);
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
   }
 

@@ -12,6 +12,7 @@ import { legalActions, newBluffGame, startHand, play, challenge } from "../src/g
 import { BLUFF_PERSONAS, DEFAULT_EXCEL, createAdaptiveAgent, randomDecide } from "../src/games/bluff/ai.ts";
 import { makeBluffLlmAgent } from "../src/games/bluff/llm.ts";
 import type { BluffAction } from "../src/games/bluff/legal.ts";
+import { describeBluffLog } from "../src/games/bluff/format.ts";
 import { createRng } from "../src/rng.ts";
 import { createDeck } from "../src/cards.ts";
 
@@ -63,7 +64,7 @@ export interface BluffSeatView {
   wildRank: number;
   roundRank: number;
   pileCount: number;
-  pending: { seat: number; count: number } | null;
+  pending: { seat: number; count: number; declaredRank: number; declaredText: string } | null;
   seats: Array<{ seat: number; name: string; cards: number; points: number; kind: SeatKind }>;
   hand: Array<{ id: string; text: string; honest: boolean; suit: string; family: string }>;
   legal: { canChallenge: boolean; maxPlay: number };
@@ -93,7 +94,7 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     wildRank: st.wildRank,
     roundRank: st.roundRank,
     pileCount: st.pile.length,
-    pending: st.pending ? { seat: st.pending.seat, count: st.pending.cards.length } : null,
+    pending: st.pending ? { seat: st.pending.seat, count: st.pending.cards.length, declaredRank: st.pending.declaredRank, declaredText: rankText(st.pending.declaredRank) } : null,
     seats: st.seats.map((p) => ({ seat: p.seat, name: p.name, cards: p.hand.length, points: p.points, kind: s.kinds[p.seat] })),
     // 牌面 = 和炸金花完全同一套(cards.ts 的 cardText:emoji 花色 + 点数)
     hand: st.seats[seat].hand.map((c) => { const full = deckById.get(c.id)!; return { id: c.id, text: cardText(full), honest: isHonestCard(c, st.roundRank, st.wildRank), suit: full.suit, family: full.family }; }),
@@ -104,7 +105,7 @@ export function bluffSeatView(s: BluffSession, seat: number): BluffSeatView {
     bustedSeat: st.bustedSeat,
     lastScores: st.lastScores,
     exhibition: ex ? { text: lines.join(String.fromCharCode(10)), lines } : null,
-    log: st.events.slice(-12).map((e) => JSON.stringify(e)),
+    log: describeBluffLog(st, st.seats.map((p) => p.name), 16),
   };
 }
 
@@ -178,4 +179,30 @@ export async function bluffRunAiAsync(s: BluffSession, maxSteps = 200): Promise<
     acted++;
   }
   return acted;
+}
+/** 只推进一步(给前端做「看得清」的节奏):返回是否有人行动 + 是否轮到人类了 */
+export async function bluffRunAiOne(s: BluffSession): Promise<{ acted: boolean; waitingHuman: boolean; handEnded: boolean }> {
+  const st = s.state;
+  if (st.over) return { acted: false, waitingHuman: false, handEnded: true };
+  if (st.handOver) {
+    for (const ag of s.agents) ag.observeHand(st);
+    startHand(st);
+    return { acted: true, waitingHuman: s.kinds[st.turn] === "human", handEnded: false };
+  }
+  const seat = st.turn;
+  const kind = s.kinds[seat];
+  if (kind === "human") return { acted: false, waitingHuman: true, handEnded: false };
+  let action: BluffAction;
+  if (kind === "llm:glm" || kind === "llm:ds") {
+    const provider = kind.slice(4) as "glm" | "ds";
+    s.llm[seat] = s.llm[seat] ?? makeBluffLlmAgent(provider, s.agents[seat]);
+    action = await s.llm[seat]!.decide(st, seat);
+  } else if (kind === "random") {
+    action = randomDecide(st, seat, s.rng);
+  } else {
+    action = s.agents[seat].decide(st, seat, s.rng);
+  }
+  const r = action.type === "PLAY" ? play(st, action.seat, action.cardIds) : challenge(st, action.seat);
+  if (!r.ok) return { acted: false, waitingHuman: false, handEnded: st.handOver };
+  return { acted: true, waitingHuman: s.kinds[st.turn] === "human", handEnded: st.handOver };
 }
