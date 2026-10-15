@@ -50,12 +50,6 @@ export const BLUFF_PERSONAS: Record<string, BluffAiOptions> = {
   Nizi: { challengeAt: 0.42, maxLie: 3, maxHonest: 4, greed: 0.25, bustFear: 1.3, oppBluffSize: 2 },
   // 囡囡:几乎不质疑、从不说谎 —— 最好骗的那位
   Nannan: { challengeAt: 0.8, maxLie: 1, maxHonest: 3, greed: 0, bustFear: 2.0, oppBluffSize: 1 },
-  // 老实人:几乎不质疑、从不说谎 —— 在唬牌里这是最容易被人拿捏的性格 ✗
-  honest: { challengeAt: 0.8, maxLie: 1, maxHonest: 3, greed: 0, bustFear: 2.0, oppBluffSize: 1 },
-  // 标准:按概率办事,偶尔贪一点
-  standard: { ...DEFAULT_EXCEL },
-  // 赌徒:敢谎报、敢质疑、不怕爆 —— 唬牌里的进攻型 ✗
-  gambler: { challengeAt: 0.35, maxLie: 5, maxHonest: 5, greed: 0.6, bustFear: 1.1, oppBluffSize: 3 },
 };
 
 /** 组合数(浮点,够用) */

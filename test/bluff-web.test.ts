@@ -26,7 +26,7 @@ test("BLUFF-WEB-01 真起服务打几手唬牌(含展览面板与切换爆牌线
     assert.equal(page.status, 200, "唬牌页面应当能被打开");
     assert.ok((await page.text()).includes("唬牌 Bluff"), "页面内容应当是唬牌");
 
-    const created = await (await fetch(BASE + "/api/bluff/new", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bust: "tight", seats: ["human", "standard", "standard", "gambler"] }) })).json();
+    const created = await (await fetch(BASE + "/api/bluff/new", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bust: "tight", seats: ["human", "Bajiao", "Nizi", "Lao6"] }) })).json();
     assert.equal(created.ok, true, "开新盘必须成功: " + JSON.stringify(created));
     assert.ok(created.view.hand.length > 0, "应当拿到自己的手牌");
     assert.equal(created.view.seats.length, 4);
@@ -52,8 +52,13 @@ test("BLUFF-WEB-01 真起服务打几手唬牌(含展览面板与切换爆牌线
     const last = await (await fetch(BASE + "/api/bluff/state?seat=0")).json();
     assert.equal(last.ok, true);
     assert.equal(last.view.seats.reduce((s: number, x: { cards: number }) => s + x.cards, 0) + last.view.pileCount <= 104, true, "牌数不该超过一副");
+    // 传旧的/错误的座位类型必须明确报错(而不是悄悄降级 —— 那会让前端表现成「点了没反应」)
+    const bad = await (await fetch(BASE + "/api/bluff/new", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bust: "tight", seats: ["human", "standard", "standard", "gambler"] }) })).json();
+    assert.equal(bad.ok, false, "旧的座位名 standard 应当被明确拒绝");
+    assert.ok(String(bad.error).includes("未知的座位类型"), "错误信息要说明原因: " + bad.error);
+
     // 切换爆牌线也要能开新盘
-    const loose = await (await fetch(BASE + "/api/bluff/new", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bust: "loose", seats: ["human", "standard", "standard", "standard"] }) })).json();
+    const loose = await (await fetch(BASE + "/api/bluff/new", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bust: "loose", seats: ["human", "Bajiao", "Bajiao", "Bajiao"] }) })).json();
     assert.equal(loose.ok, true, "52 爆牌线也要能开局");
   } finally {
     child.kill();

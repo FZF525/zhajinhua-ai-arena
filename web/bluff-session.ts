@@ -22,14 +22,17 @@ export type SeatKind = "human" | "random" | keyof typeof BLUFF_PERSONAS | "llm:g
 
 /** 座位类型白名单(前端传来的东西一律过滤) */
 const KINDS: string[] = ["human", "random", ...Object.keys(BLUFF_PERSONAS), "llm:glm", "llm:ds"];
-export function parseSeatKinds(raw: unknown): SeatKind[] {
+/** 解析座位类型;未知值**不静默降级**(会被前端当成"点了没反应"),而是报出来 */
+export function parseSeatKinds(raw: unknown): { kinds: SeatKind[]; bad: string[] } {
   const arr = Array.isArray(raw) ? raw : [];
-  const out: SeatKind[] = [];
+  const kinds: SeatKind[] = [];
+  const bad: string[] = [];
   for (let i = 0; i < 4; i++) {
     const v = String(arr[i] ?? "human");
-    out.push(KINDS.includes(v) ? (v as SeatKind) : "human");
+    if (KINDS.includes(v)) kinds.push(v as SeatKind);
+    else { bad.push(v); kinds.push("human"); }
   }
-  return out;
+  return { kinds, bad };
 }
 
 export interface BluffSession {

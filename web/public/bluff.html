@@ -73,9 +73,10 @@ select, input { background:#0d1219; color:var(--fg); border:1px solid var(--line
       <select id="bustSel"><option value="tight">40(火爆局)</option><option value="loose">52(技术局)</option></select>
       <label class="hint">你对家:</label>
       <select id="kindSel">
-        <option value="standard">标准 AI</option>
-        <option value="gambler">赌徒 AI</option>
-        <option value="honest">老实人 AI</option>
+        <option value="Bajiao">Bajiao(芭蕉 · 标准)</option>
+        <option value="Lao6">Lao6(老六 · 赌徒)</option>
+        <option value="Nizi">Nizi(妮子 · 多疑)</option>
+        <option value="Nannan">Nannan(囡囡 · 老实人)</option>
         <option value="random">随机</option>
         <option value="llm:glm">GLM(需 GLM_API_KEY)</option>
         <option value="llm:ds">DeepSeek(需 DS_API_KEY)</option>
@@ -98,7 +99,17 @@ function $(id) { return document.getElementById(id); }
 function toast(msg) { var t = $('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2200); }
 function api(path, body) {
   return fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined)
-    .then(function (r) { return r.json(); });
+    .then(function (r) {
+      // 关键:以前这里不管状态码直接 r.json() —— 404/HTML 会抛异常,而异常被 Promise 吞掉
+      // 于是页面上表现成「点了没反应」(炸金花阶段也踩过同族的坑:失败被渲染成别的意思)
+      if (!r.ok) throw new Error('接口 ' + path + ' 返回 HTTP ' + r.status + (r.status === 404 ? '(服务端可能是旧进程/页面是旧缓存,请重启服务端并 Ctrl+F5)' : ''));
+      return r.json();
+    })
+    .catch(function (e) {
+      console.error('[bluff]', e);
+      toast(String(e.message || e));
+      throw e;
+    });
 }
 function render() {
   if (!view) return;
