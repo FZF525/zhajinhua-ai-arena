@@ -12,6 +12,8 @@ export function describeBluffEvent(e: Ev, names: string[]): string {
       return "第 " + e.handNo + " 局开始 · 庄家 " + nm(e.dealer) + " · 本局癞子 " + e.wildText + " ★";
     case "PLAY":
       return nm(e.seat) + " 出了 " + e.count + " 张,报全是 " + e.declaredText;
+    case "BLUFF_PAID":
+      return nm(e.by) + " **骗过全场**(报 " + e.count + " 张,没人质疑)→ 从其他三家各收 " + e.bonus + " 分";
     case "CHALLENGE": {
       const who = nm(e.by);
       const target = nm(e.against);

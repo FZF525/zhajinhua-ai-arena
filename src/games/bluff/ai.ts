@@ -120,7 +120,13 @@ export function excelDecide(st: BluffState, seat: number, opts: BluffAiOptions =
   // ① 面对上家那一手
   if (st.pending && st.pending.seat !== seat) {
     const k = st.pending.cards.length;
-    const pCheat = cheatProbability(st, seat, k, opts);
+    let pCheat = cheatProbability(st, seat, k, opts);
+    // 读局 ①:组合上不可能 —— 外面剩的真牌还不够他报这么多 → 必是谎话(精确判断)
+    if (unseenCounts(st, seat).H < k) pCheat = 1;
+    // 读局 ②:对手手牌越多越绝望(以满手 handSize 为基准)→ 上调说谎概率
+    const declHand = k + st.seats[st.pending.seat].hand.length;
+    const desperation = Math.max(0.5, Math.min(2.0, declHand / Math.max(1, st.cfg.handSize)));
+    pCheat = Math.min(1, pCheat * (0.7 + 0.5 * desperation));
     const pot = st.pile.length + k;
     const willBust = me.hand.length + pot > st.cfg.bustCards;
     // 质疑是有赌注的:+win / -fee → 只在 pCheat > fee/(win+fee) 时才划算(精确盈亏平衡点)

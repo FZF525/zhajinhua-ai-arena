@@ -194,8 +194,22 @@ export function play(st: BluffState, seat: number, cardIds: string[], declaredRa
     if (idx < 0) return { ok: false, error: "cardNotInHand" };
     toPlay.push(p.hand[idx]);
   }
+  // 上一手活下来了(= 没人质疑)→ 如果它是谎话,那就是"骗过全场":其他三家各付 bluffBonus(零和)
   const prevOwner = st.pending ? st.pending.seat : null;
-  if (st.pending) { st.pile.push(...st.pending.cards); st.pending = null; }
+  if (st.pending) {
+    const bonus = Math.max(0, st.cfg.bluffBonus ?? 0);
+    if (bonus > 0) {
+      const lied = st.pending.cards.some((c) => !isHonestCard(c, st.pending!.declaredRank, st.wildRank));
+      if (lied) {
+        const payers = st.seats.filter((p) => p.seat !== st.pending!.seat);
+        payers.forEach((p) => { p.points -= bonus; });
+        st.seats[st.pending!.seat].points += bonus * payers.length;
+        st.events.push({ kind: "BLUFF_PAID", by: st.pending!.seat, count: st.pending!.cards.length, declaredRank: st.pending!.declaredRank, bonus, perPayer: bonus, total: bonus * payers.length });
+      }
+    }
+    st.pile.push(...st.pending.cards);
+    st.pending = null;
+  }
   // 上家那一手没被质疑 → 若他已经出空,他赢这一局
   if (prevOwner !== null && st.seats[prevOwner].hand.length === 0) {
     endHand(st, prevOwner, null);

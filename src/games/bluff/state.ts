@@ -24,6 +24,8 @@ export interface BluffConfig {
   challengeSettle?: "immediate" | "hidden";
   /** 藏起来的「质疑成功次数」在盘末按均值偏差折算多少分/次(0 = 不算这笔)。默认 0 */
   challengeWinsBonus?: number;
+  /** 撒谎成功奖励:一手谎话**没被质疑**(骗过去了)→ 其他三家各付这么多分给撒谎者(零和)。默认 0 */
+  bluffBonus?: number;
   /** 账本透明度:full = 局末把每一手真假都记账(现状);revealed = **只记被质疑翻过的那几手**
    *  后者让"没被抓到的谎话"永远是谜 → 撒谎的收益回升 ✓ */
   ledgerMode?: "full" | "revealed";
