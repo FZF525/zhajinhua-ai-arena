@@ -48,6 +48,12 @@
 <h1>八门拱猪 · 星月版 <small>104 张 / 8 门 / 4 人各 26 张 · ♦3 先手 · 贴牌算最后</small></h1>
 <div class="bar">
   <button id="newBtn" class="primary">新开一局</button>
+  <label style="color:var(--dim);font-size:12px">AI 种类</label>
+  <select id="aiSel" style="background:#1b2530;color:#dbe4ee;border:1px solid var(--line);border-radius:8px;padding:5px">
+    <option value="random">随机(新手)</option>
+    <option value="greedy" selected>贪心(会抢分躲猪)</option>
+    <option value="counting">记牌(会数外面的大牌)</option>
+  </select>
   <label style="color:var(--dim);font-size:12px">AI 速度</label>
   <select id="speedSel" style="background:#1b2530;color:#dbe4ee;border:1px solid var(--line);border-radius:8px;padding:5px">
     <option value="900">慢(看得清)</option>
@@ -195,7 +201,7 @@ function playCard(id) {
 
 $('newBtn').onclick = function () {
   picks.clear();
-  api('/api/zhupig/new', { seat: seat }).then(function (r) {
+  api('/api/zhupig/new', { seat: seat, ai: ($('aiSel') && $('aiSel').value) || 'greedy' }).then(function (r) {
     if (!r.ok) { toast(r.error || '开局失败'); return; }
     view = r.view; render(); toast('已发牌:先决定要不要亮牌');
   });

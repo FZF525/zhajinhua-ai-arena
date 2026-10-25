@@ -7,6 +7,8 @@ import type { Card } from "../src/cards.ts";
 import { CLASSIC_ZHUPIG, type ZhupigState, type ZpPlay } from "../src/games/zhupig/state.ts";
 import { dealZhupig, legalZhupig, playZhupig, checkZhupigInvariants, declareShow } from "../src/games/zhupig/rules.ts";
 import { scoreZhupig } from "../src/games/zhupig/score.ts";
+import { zpAiPlay } from "../src/games/zhupig/ai.ts";
+import { createRng } from "../src/rng.ts";
 
 const DECK = createDeck();
 const C = (id: string): Card => {
@@ -203,4 +205,23 @@ test("ZP-20 其他特殊牌的自身亮出效果仍然生效(变压器 ×4 / 水
   assert.equal(litTransformer.perSeat[0].transformer, 30, "红桃 10 → 亮出变压器 ×4 → 追加 30");
   const litWater = scoreZhupig(mk([[["SNOW-5"], ["DROPLET-9", true]]]));
   assert.equal(litWater.perSeat[0].water9, -3.75, "个人分 5 → 水滴 1/4 → 变动 -3.75");
+});
+
+test("ZP-21 三档 AI 都只会出合法牌(随机 / 贪心 / 记牌)", () => {
+  for (const kind of ["random", "greedy", "counting"] as const) {
+    const st = dealZhupig(CLASSIC_ZHUPIG, ["A", "B", "C", "D"], 555);
+    const rng = createRng(1);
+    let guard = 0;
+    while (!st.over && guard++ < 400) {
+      const seat = st.turn;
+      const card = zpAiPlay(kind, st, seat, rng);
+      assert.ok(legalZhupig(st, seat).some((c) => c.id === card.id), kind + " 出了非法牌: " + card.id);
+      const r = playZhupig(st, seat, card.id);
+      assert.equal(r.ok, true, kind + " 出牌被拒: " + r.error);
+    }
+    assert.equal(st.over, true, kind + " 应当能打完一局");
+    assert.deepEqual(checkZhupigInvariants(st), [], kind + " 打完不能不变量异常");
+    const sc = scoreZhupig(st);
+    assert.equal(Math.abs(sc.perSeat.reduce((a, p) => a + p.final, 0)) < 1e-9, true, kind + " 必须零和");
+  }
 });

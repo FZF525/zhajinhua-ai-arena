@@ -4,7 +4,7 @@ import { CLASSIC_ZHUPIG, type ZhupigState, rankLabel } from "../src/games/zhupig
 import { SUITS } from "../src/cards.ts";
 import { dealZhupig, legalZhupig, playZhupig, declareShow, isSpecialId, isRevealable } from "../src/games/zhupig/rules.ts";
 import { scoreZhupig } from "../src/games/zhupig/score.ts";
-import { zpAiChoose, zpAiDeclare } from "../src/games/zhupig/ai.ts";
+import { zpAiPlay, zpAiDeclare, type ZpAiKind } from "../src/games/zhupig/ai.ts";
 
 export type ZpPhase = "declare" | "play" | "over";
 
@@ -14,18 +14,19 @@ export interface ZpSession {
   seed: number;
   phase: ZpPhase;
   rng: ReturnType<typeof createRng>;
+  aiKind: ZpAiKind;
 }
 
 const AI_NAMES = ["老六", "芭蕉", "囡囡"];
 
-export function createZpSession(humanSeat = 0, seed = Date.now()): ZpSession {
+export function createZpSession(humanSeat = 0, seed = Date.now(), aiKind: ZpAiKind = "greedy"): ZpSession {
   const seat = Math.max(0, Math.min(3, humanSeat));
   const names = ["你", "你", "你", "你"];
   names[seat] = "你(你)";
   let ai = 0;
   for (let i = 0; i < 4; i++) if (i !== seat) names[i] = AI_NAMES[ai++ % AI_NAMES.length];
   const st = dealZhupig(CLASSIC_ZHUPIG, names, seed);
-  return { st, human: seat, seed, phase: "declare", rng: createRng(seed * 31 + 7) };
+  return { st, human: seat, seed, phase: "declare", rng: createRng(seed * 31 + 7), aiKind };
 }
 
 /** 人类完成亮牌声明 → 开始 */
@@ -50,7 +51,7 @@ export function zpRunAiOne(s: ZpSession): boolean {
   if (s.phase !== "play") return false;
   const seat = s.st.turn;
   if (seat === s.human) return false;
-  const card = zpAiChoose(s.st, seat, s.rng);
+  const card = zpAiPlay(s.aiKind, s.st, seat, s.rng);
   const r = zpApply(s, seat, card.id);
   if (!r.ok) throw new Error("AI 出牌非法: " + r.error);
   return true;
