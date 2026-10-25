@@ -178,7 +178,10 @@ test("ZP-18 亮出 ♥A → 全场红桃分值 ×2(不只是自己那张)", () =
     [["SNOW-5"]],                             // 雪花不受影响
     [],
   ]));
-  assert.equal(r.perSeat[0].heartsEffective, 100 + 20, "甲的红桃应当 ×2");
+  assert.equal(r.perSeat[0].heartsEffective, 100 + 20, "甲的红桃应当 ×2(♥A 50→100 且 ♥5 10→20)");
+  // ★ 作者定稿:"都需要算" —— 门主自己那张也加倍(60 行的 100 已经隐含,这里再单独钉死)
+  const ace = r.perSeat[0].entries.find((e) => e.cardId === "HEART-A")!;
+  assert.equal(ace.heartValue, 100, "门主 ♥A 自己也要 50→100(不只是其他红桃)");
   assert.equal(r.perSeat[1].heartsEffective, 80, "乙的红桃也应当 ×2(全场)");
   assert.equal(r.perSeat[2].snow, 5, "雪花不受红桃门主影响");
 });
