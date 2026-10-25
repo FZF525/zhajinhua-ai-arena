@@ -20,6 +20,53 @@ async function waitHealth(tries = 60): Promise<void> {
 const post = async (path: string, body: unknown) =>
   (await fetch(BASE + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
 
+test("ZP-WEB-02 连局:累计分会累加,有人到线就停并给出排名", async () => {
+  const child = spawn(process.execPath, [join(ROOT, "web", "server.ts"), "--port=" + (PORT + 7)], { cwd: ROOT, stdio: "ignore" });
+  const B2 = "http://127.0.0.1:" + (PORT + 7);
+  const p2 = async (path: string, body: unknown) =>
+    (await fetch(B2 + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
+  try {
+    for (let i = 0; i < 60; i++) { try { const r = await fetch(B2 + "/api/health"); if (r.ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 120)); }
+    const created = await p2("/api/zhupig/new", { seat: 0, ai: "greedy", stopAt: -1 });
+    assert.equal(created.ok, true);
+    assert.equal(created.view.match.total.length, 4, "应当有累计分");
+    assert.equal(created.view.match.stopAt, -1, "停止线应当生效(stopAt=-1 让测试一轮就停)");
+    const dec = await p2("/api/zhupig/declare", { seat: 0, cardIds: [] });
+    assert.equal(dec.ok, true, "亮牌声明(空)必须成功");
+    assert.equal(dec.view.phase, "play");
+    // 打一局
+    let over = false;
+    for (let g = 0; g < 500 && !over; g++) {
+      const st: any = await (await fetch(B2 + "/api/zhupig/state?seat=0")).json();
+      if (st.view.phase === "over") { over = true; break; }
+      if (st.view.myTurn) await p2("/api/zhupig/action", { seat: 0, cardId: st.view.legalIds[0] });
+      else await p2("/api/zhupig/step", { seat: 0 });
+    }
+    assert.equal(over, true, "应当打得完一局");
+    const fin: any = await (await fetch(B2 + "/api/zhupig/state?seat=0")).json();
+    // 累计应当等于本局最终分(第一局)
+    assert.deepEqual(fin.view.match.total.length, 4);
+    const sumFinal = fin.view.score.perSeat.reduce((a: number, p: any) => a + p.final, 0);
+    assert.equal(Math.abs(sumFinal) < 1e-9, true, "本局仍零和");
+    // stopAt=-1:一定有人 ≤ -1(除非全员恰好 0)→ 连局结束 + 有排名
+    if (fin.view.match.over) {
+      assert.ok(Array.isArray(fin.view.match.ranking), "到线后必须给出排名");
+      assert.equal(fin.view.match.ranking.length, 4);
+      assert.equal(fin.view.match.ranking[0].total >= fin.view.match.ranking[3].total, true, "排名要按累计分降序");
+      // 已结束时不允许再开下一局
+      const nxt = await p2("/api/zhupig/next", { seat: 0 });
+      assert.equal(nxt.ok, false, "连局已结束时不能再开下一局");
+    } else {
+      const nxt = await p2("/api/zhupig/next", { seat: 0 });
+      assert.equal(nxt.ok, true, "没到线应当能开下一局");
+      assert.equal(nxt.view.match.no, 2, "局数要 +1");
+      assert.equal(nxt.view.phase, "declare", "新局从亮牌阶段开始");
+    }
+  } finally {
+    child.kill();
+  }
+});
+
 test("ZP-WEB-01 真起服务打完整一局:发牌 → 亮牌 → 26 轮 → 结算(含隐私检查)", async () => {
   const child = spawn(process.execPath, [join(ROOT, "web", "server.ts"), "--port=" + PORT], { cwd: ROOT, stdio: "ignore" });
   try {

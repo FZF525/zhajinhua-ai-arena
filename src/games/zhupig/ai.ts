@@ -30,6 +30,12 @@ export function zpAiDeclare(st: ZhupigState, seat: number): string[] {
 
 export type ZpAiKind = "random" | "greedy" | "counting";
 
+/** 给 AI 的额外上下文(全部是公开信息:累计分)*/
+export interface ZpAiContext {
+  /** 四家累计分(连局时用)—— 用来"盯着领先者打" */
+  total?: number[];
+}
+
 /** 已打出的牌(公开信息:本轮 + 各人收牌堆 + 弃牌)*/
 function playedCards(st: ZhupigState): Card[] {
   return [...st.trick.plays.map((p) => p.card), ...st.seats.flatMap((s) => s.pile.map((p) => p.card)), ...st.discard];
@@ -52,13 +58,26 @@ function rankLabelNum(r: number): string {
 }
 
 /** 三档 AI 的出牌入口 */
-export function zpAiPlay(kind: ZpAiKind, st: ZhupigState, seat: number, rng: Rng): Card {
+/** 按目前已出的牌,这一轮现在会归谁(用于"盯人")*/
+function currentWinner(st: ZhupigState): number | null {
+  if (!st.trick.plays.length) return null;
+  const suit = st.trick.ledSuit;
+  let best = st.trick.plays[0];
+  for (const p of st.trick.plays) {
+    const pf = p.card.suit === suit, bf = best.card.suit === suit;
+    if (pf && !bf) best = p;
+    else if (pf && bf && p.card.rank > best.card.rank) best = p;
+  }
+  return best.seat;
+}
+
+export function zpAiPlay(kind: ZpAiKind, st: ZhupigState, seat: number, rng: Rng, ctx?: ZpAiContext): Card {
   if (kind === "random") {
     const legal = legalZhupig(st, seat);
     return legal[Math.floor(rng.next() * legal.length)];
   }
   if (kind === "greedy") return zpAiChoose(st, seat, rng);
-  return zpAiChooseCounting(st, seat, rng);
+  return zpAiChooseCounting(st, seat, rng, ctx);
 }
 
 /** 贪心(修正版):**领出不再打最大牌** —— 有猪先甩猪,否则领最小的;跟牌才抢正分轮 */
@@ -96,12 +115,20 @@ export function zpAiChoose(st: ZhupigState, seat: number, rng: Rng): Card {
  *  ② 跟牌:先看"这一轮里有什么" —— 有羊/变压器/雪花 → **必须争**;有水滴9/刀刃 → **必须躲**
  *  ③ 用公开信息数"外面还剩几张比我大的",估算能不能站住
  */
-export function zpAiChooseCounting(st: ZhupigState, seat: number, rng: Rng): Card {
+export function zpAiChooseCounting(st: ZhupigState, seat: number, rng: Rng, ctx?: ZpAiContext): Card {
   const legal = legalZhupig(st, seat);
   const led = st.trick.ledSuit;
   const trickValue = st.trick.plays.reduce((a, p) => a + zpCardValue(st, p.card), 0);
   const asc = legal.slice().sort((a, b) => a.rank - b.rank);
   const sp = st.cfg.specials;
+
+  // ★ "盯人":如果这一轮现在会被**累计分领先者**收走 → 正分轮我要更拼,负分轮我乐得让他吃
+  let rivalWinning = false;
+  if (ctx && ctx.total && st.trick.plays.length) {
+    const lead = ctx.total.indexOf(Math.max(...ctx.total));
+    const curWinner = currentWinner(st);
+    rivalWinning = curWinner !== null && curWinner === lead && curWinner !== seat;
+  }
 
   // 这一轮里有没有"抢手货"(羊 +100 / 变压器 / 雪花正分)和"烫手山芋"(水滴9 / 刀刃)
   const hasTreat = st.trick.plays.some((p) => {
@@ -130,12 +157,12 @@ export function zpAiChooseCounting(st: ZhupigState, seat: number, rng: Rng): Car
   // 必须躲:水滴/刀刃/负分 → 出最小、且尽量不赢
   if (hasTrap && !hasTreat) return (dodge.length ? dodge : legal).slice().sort((a, b) => a.rank - b.rank)[0];
 
-  // 必须争:羊/变压器/正分雪花 → 能赢就赢(最后一家直接赢;否则看数牌)
+  // 必须争:羊/变压器/正分雪花 → 能赢就赢;**领先者要收走的话更拼**
   if (hasTreat && winning.length) {
     if (last) return winning[0];
     const higher = unknownHigher(st, led, winning[0].rank, seat);
-    // 外面还剩 0 张→必站住;还剩 1~2 张→值得冒险(抢手货值得)
-    if (higher <= 2) return winning[0];
+    // 外面还剩 0 张→必站住;还剩 1~2 张→值得冒险(抢手货值得);领先者要收 → 放宽到 3 张
+    if (higher <= (rivalWinning ? 3 : 2)) return winning[0];
     return winning[winning.length - 1];   // 争不到就用最大的拼一下
   }
 

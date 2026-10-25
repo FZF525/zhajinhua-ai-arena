@@ -14,6 +14,8 @@
   button:hover { border-color:var(--gold); }
   button:disabled { opacity:.4; cursor:not-allowed; }
   button.primary { background:#2a3a2c; border-color:#3f6a44; }
+  #matchPanel { background:#1a1408; border:1px solid #b8790a; border-radius:10px; padding:12px; margin-bottom:10px; }
+  #matchPanel table { margin-top:6px; }
   #seats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
   .seat { background:#111820; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
   .seat.active { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
@@ -60,9 +62,12 @@
     <option value="420" selected>中</option>
     <option value="140">快</option>
   </select>
+  <button id="nextBtn" style="display:none">下一局 ▶</button>
+  <span id="matchInfo" style="color:#ffcf6b;font-size:13px"></span>
   <span id="phase" style="color:var(--dim);font-size:13px"></span>
 </div>
 
+<div id="matchPanel" style="display:none"></div>
 <div id="seats"></div>
 <div id="trick"></div>
 <div id="lastTrick" style="font-size:12px;color:var(--dim);margin-bottom:10px;min-height:20px"></div>
@@ -121,6 +126,24 @@ function render() {
     slots.push('<div class="slot"><div class="who">' + (p ? esc(p.name) : '·') + '</div>' + (p ? cardHtml(p.card) : '<div class="card back"></div>') + '</div>');
   }
   $('trick').innerHTML = slots.join('');
+  // 连局信息
+  var mt = view.match;
+  if (mt) {
+    $('matchInfo').textContent = '第 ' + mt.no + ' 局 · 累计 ' + mt.total.map(function (v, i) {
+      return (view.seats[i] ? view.seats[i].name.replace('你(你)', '你') : i) + ' ' + (v >= 0 ? '+' : '') + v;
+    }).join(' / ') + ' · 到 ' + mt.stopAt + ' 结束';
+    $('nextBtn').style.display = (view.phase === 'over' && !mt.over) ? 'inline-block' : 'none';
+    if (mt.over && mt.ranking) {
+      $('matchPanel').style.display = 'block';
+      $('matchPanel').innerHTML = '<b>连局结束(有人累计到 ' + mt.stopAt + ')</b> · 共 ' + mt.no + ' 局' +
+        '<table><tr><th>名次</th><th>座位</th><th>累计最终分</th></tr>' +
+        mt.ranking.map(function (r, i) {
+          return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.name.replace('你(你)', '你')) + '</td><td class="' + (r.total >= 0 ? 'pos' : 'neg') + '"><b>' + r.total + '</b></td></tr>';
+        }).join('') + '</table>';
+    } else {
+      $('matchPanel').style.display = 'none';
+    }
+  }
   // 上一轮(常驻显示,不然 AI 出完就看不见了)
   var lt = view.lastTrick;
   $('lastTrick').innerHTML = lt
@@ -212,6 +235,13 @@ $('startBtn').onclick = function () {
     if (!r.ok) { toast(r.error || '亮牌失败'); return; }
     view = r.view; render(); toast('开始!♦3 持有者先出');
     return autoStep();
+  });
+};
+
+$('nextBtn').onclick = function () {
+  api('/api/zhupig/next', { seat: seat }).then(function (r) {
+    if (!r.ok) { toast(r.error || '开下一局失败'); return; }
+    view = r.view; render(); toast('新的一局开始,先决定要不要亮牌');
   });
 };
 

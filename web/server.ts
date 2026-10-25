@@ -24,7 +24,7 @@ import { ENGINE_VERSION } from "../src/version.ts";
 import { actorOf, buildView, viewerSeatFor } from "./view.ts";
 import { createBluffSession, bluffSeatView, bluffApply, bluffRunAiOne, parseSeatKinds, CHALLENGE_PRESETS } from "./bluff-session.ts";
 import type { BluffSession } from "./bluff-session.ts";
-import { createZpSession, zpDeclareHuman, zpApply, zpRunAiOne, zpSeatView } from "./zhupig-session.ts";
+import { createZpSession, zpDeclareHuman, zpApply, zpRunAiOne, zpSeatView, zpNextHand } from "./zhupig-session.ts";
 import type { ZpSession } from "./zhupig-session.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -225,7 +225,8 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const seat = Math.max(0, Math.min(3, Number(body.seat ?? 0)));
     const aiKind = (["random", "greedy", "counting"] as const).includes(String(body.ai) as never) ? String(body.ai) as "random" | "greedy" | "counting" : "greedy";
-    zhupig = createZpSession(seat, Number(body.seed ?? Date.now()), aiKind);
+    const stopAt = Math.max(-1e9, Math.min(-1, Number(body.stopAt ?? -8000) || -8000));
+    zhupig = createZpSession(seat, Number(body.seed ?? Date.now()), aiKind, stopAt);
     return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
   }
   if (path === "/api/zhupig/declare" && req.method === "POST") {
@@ -234,6 +235,14 @@ const server = http.createServer(async (req, res) => {
     const seat = Math.max(0, Math.min(3, Number(body.seat ?? zhupig.human)));
     const ids = Array.isArray(body.cardIds) ? body.cardIds.map(String) : [];
     const r = zpDeclareHuman(zhupig, ids);
+    if (!r.ok) return sendJson(res, 200, { ok: false, error: r.error });
+    return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
+  }
+  if (path === "/api/zhupig/next" && req.method === "POST") {
+    if (!zhupig) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    const body = await readBody(req);
+    const seat = Math.max(0, Math.min(3, Number(body.seat ?? zhupig.human)));
+    const r = zpNextHand(zhupig);
     if (!r.ok) return sendJson(res, 200, { ok: false, error: r.error });
     return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
   }
