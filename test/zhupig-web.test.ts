@@ -38,9 +38,11 @@ test("ZP-WEB-01 真起服务打完整一局:发牌 → 亮牌 → 26 轮 → 结
     assert.equal(Array.isArray(created.view.trick), true, "视图的 trick 必须是数组");
     assert.equal(Array.isArray(created.view.hand), true);
     assert.equal(Array.isArray(created.view.legalIds), true);
-    // 隐私:别人的收牌堆不可见(自己的可见)
-    assert.equal(created.view.seats[1].pile, null, "别人的收牌堆必须不可见");
-    assert.notEqual(created.view.seats[0].pile, null, "自己的收牌堆可见");
+    // 收牌堆是**公开信息**(每轮都明着打)→ 四家都实时展示
+    assert.equal(Array.isArray(created.view.seats[0].pile), true, "自己的收牌堆要实时可见");
+    assert.equal(Array.isArray(created.view.seats[1].pile), true, "别人的收牌堆也要实时可见(公开信息)");
+    // 别人的**手牌**仍然不可见(视图里根本没有这个字段)
+    assert.equal(created.view.seats[1].hand, undefined, "别人的手牌绝不能出现在视图里");
 
     const declared = await post("/api/zhupig/declare", { seat: 0, cardIds: [] });
     assert.equal(declared.ok, true, "亮牌声明必须成功");

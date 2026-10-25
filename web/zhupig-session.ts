@@ -81,7 +81,10 @@ export function zpSeatView(s: ZpSession, seat: number) {
       seat: p.seat, name: p.name,
       handCount: p.hand.length,
       pileCount: p.pile.length,
-      pile: p.seat === seat ? p.pile.map((x) => cardView(st, x.card)) : null,   // 自己的收牌堆才可见
+      // 收牌堆是**公开信息**(每轮都明着打):四家都实时展示 ✓
+      // 只列特殊牌(计分相关),普通牌只给数量,免得屏幕太长
+      pile: p.pile.filter((x) => isSpecialId(st.cfg, x.card)).map((x) => cardView(st, x.card)),
+      pileTotal: p.pile.length,
       isHuman: p.seat === s.human,
     })),
     trickNo: st.trickNo,

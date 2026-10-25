@@ -19,6 +19,9 @@
   .seat.active { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
   .seat .n { font-weight:600; font-size:13px; }
   .seat .c { color:var(--dim); font-size:12px; }
+  .seat .pile { display:flex; flex-wrap:wrap; gap:2px; margin-top:4px; }
+  .seat .pile .card { width:34px; height:42px; font-size:11px; }
+  .seat .won { color:#ffcf6b; font-size:11px; }
   #trick { display:flex; gap:8px; min-height:92px; align-items:center; padding:8px; background:#0e141b; border:1px dashed var(--line); border-radius:10px; margin-bottom:10px; }
   #trick .slot { text-align:center; }
   #trick .who { font-size:11px; color:var(--dim); margin-bottom:4px; }
@@ -45,11 +48,18 @@
 <h1>八门拱猪 · 星月版 <small>104 张 / 8 门 / 4 人各 26 张 · ♦3 先手 · 贴牌算最后</small></h1>
 <div class="bar">
   <button id="newBtn" class="primary">新开一局</button>
+  <label style="color:var(--dim);font-size:12px">AI 速度</label>
+  <select id="speedSel" style="background:#1b2530;color:#dbe4ee;border:1px solid var(--line);border-radius:8px;padding:5px">
+    <option value="900">慢(看得清)</option>
+    <option value="420" selected>中</option>
+    <option value="140">快</option>
+  </select>
   <span id="phase" style="color:var(--dim);font-size:13px"></span>
 </div>
 
 <div id="seats"></div>
 <div id="trick"></div>
+<div id="lastTrick" style="font-size:12px;color:var(--dim);margin-bottom:10px;min-height:20px"></div>
 <div id="banner"></div>
 
 <div id="declare" style="display:none">
@@ -94,7 +104,8 @@ function render() {
   $('seats').innerHTML = view.seats.map(function (s) {
     return '<div class="seat ' + (s.seat === view.turn ? 'active' : '') + '">' +
       '<div class="n">' + esc(s.name) + (s.isHuman ? ' (你)' : '') + '</div>' +
-      '<div class="c">手牌 ' + s.handCount + ' 张 · 收牌堆 ' + s.pileCount + ' 张</div></div>';
+      '<div class="c">手牌 ' + s.handCount + ' 张 · 收牌堆 ' + (s.pileTotal != null ? s.pileTotal : s.pileCount) + ' 张</div>' +
+      '<div class="pile">' + (s.pile || []).map(function (c) { return cardHtml(c); }).join('') + '</div></div>';
   }).join('');
   // 本轮出的牌
   var trick = view.trick || [];
@@ -104,6 +115,11 @@ function render() {
     slots.push('<div class="slot"><div class="who">' + (p ? esc(p.name) : '·') + '</div>' + (p ? cardHtml(p.card) : '<div class="card back"></div>') + '</div>');
   }
   $('trick').innerHTML = slots.join('');
+  // 上一轮(常驻显示,不然 AI 出完就看不见了)
+  var lt = view.lastTrick;
+  $('lastTrick').innerHTML = lt
+    ? '上一轮:' + lt.plays.map(function (p) { return esc(p.name) + ' ' + p.card.text; }).join(' · ') + ' → <b style="color:#ffcf6b">' + esc(lt.winnerName) + ' 收牌</b>'
+    : '';
   // 亮牌面板
   $('declare').style.display = view.canDeclare ? 'block' : 'none';
   if (view.canDeclare) {
@@ -157,11 +173,16 @@ function autoStep() {
   if (busy) return Promise.resolve();
   if (!view || view.phase !== 'play' || view.myTurn || view.over) return Promise.resolve();
   busy = true;
+  var prevTrickNo = view.trickNo;
+  var speed = Number(($('speedSel') && $('speedSel').value) || 420);
   return api('/api/zhupig/step', { seat: seat }).then(function (r) {
     busy = false;
     if (!r.ok) { toast(r.error || 'AI 出错'); return; }
     view = r.view; render();
-    return new Promise(function (res) { setTimeout(res, 120); }).then(autoStep);
+    // 一轮打完就多停一会儿,让人看清"谁赢、收了什么"
+    var trickDone = view.trickNo > prevTrickNo;
+    var wait = trickDone ? Math.max(speed * 2, 900) : speed;
+    return new Promise(function (res) { setTimeout(res, wait); }).then(autoStep);
   });
 }
 
