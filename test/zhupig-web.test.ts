@@ -27,10 +27,11 @@ test("ZP-WEB-02 连局:累计分会累加,有人到线就停并给出排名", as
     (await fetch(B2 + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
   try {
     for (let i = 0; i < 60; i++) { try { const r = await fetch(B2 + "/api/health"); if (r.ok) break; } catch { /* wait */ } await new Promise((r) => setTimeout(r, 120)); }
-    const created = await p2("/api/zhupig/new", { seat: 0, ai: "greedy", stopAt: -1 });
+    const created = await p2("/api/zhupig/new", { seat: 0, ai: "greedy", stopLow: -1, stopHigh: 1 });
     assert.equal(created.ok, true);
     assert.equal(created.view.match.total.length, 4, "应当有累计分");
-    assert.equal(created.view.match.stopAt, -1, "停止线应当生效(stopAt=-1 让测试一轮就停)");
+    assert.equal(created.view.match.stopLow, -1, "低线应当生效");
+    assert.equal(created.view.match.stopHigh, 1, "高线应当生效");
     const dec = await p2("/api/zhupig/declare", { seat: 0, cardIds: [] });
     assert.equal(dec.ok, true, "亮牌声明(空)必须成功");
     assert.equal(dec.view.phase, "play");

@@ -225,8 +225,9 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const seat = Math.max(0, Math.min(3, Number(body.seat ?? 0)));
     const aiKind = (["random", "greedy", "counting"] as const).includes(String(body.ai) as never) ? String(body.ai) as "random" | "greedy" | "counting" : "greedy";
-    const stopAt = Math.max(-1e9, Math.min(-1, Number(body.stopAt ?? -8000) || -8000));
-    zhupig = createZpSession(seat, Number(body.seed ?? Date.now()), aiKind, stopAt);
+    const stopLow = Math.max(-1e9, Math.min(-1, Number(body.stopLow ?? -5000) || -5000));
+    const stopHigh = Math.max(1, Math.min(1e9, Number(body.stopHigh ?? 5000) || 5000));
+    zhupig = createZpSession(seat, Number(body.seed ?? Date.now()), aiKind, stopLow, stopHigh);
     return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
   }
   if (path === "/api/zhupig/declare" && req.method === "POST") {

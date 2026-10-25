@@ -131,11 +131,11 @@ function render() {
   if (mt) {
     $('matchInfo').textContent = '第 ' + mt.no + ' 局 · 累计 ' + mt.total.map(function (v, i) {
       return (view.seats[i] ? view.seats[i].name.replace('你(你)', '你') : i) + ' ' + (v >= 0 ? '+' : '') + v;
-    }).join(' / ') + ' · 到 ' + mt.stopAt + ' 结束';
+    }).join(' / ') + ' · 到 ' + mt.stopLow + ' / +' + mt.stopHigh + ' 结束';
     $('nextBtn').style.display = (view.phase === 'over' && !mt.over) ? 'inline-block' : 'none';
     if (mt.over && mt.ranking) {
       $('matchPanel').style.display = 'block';
-      $('matchPanel').innerHTML = '<b>连局结束(有人累计到 ' + mt.stopAt + ')</b> · 共 ' + mt.no + ' 局' +
+      $('matchPanel').innerHTML = '<b>连局结束</b>(第 ' + mt.no + ' 局 · ' + (mt.stopHit ? esc(String(mt.stopHit.name).replace('你(你)', '你')) + ' 到' + (mt.stopHit.side === 'high' ? ' +' : ' ') + mt.stopHit.total : '') + ') · 共 ' + mt.no + ' 局' +
         '<table><tr><th>名次</th><th>座位</th><th>累计最终分</th></tr>' +
         mt.ranking.map(function (r, i) {
           return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.name.replace('你(你)', '你')) + '</td><td class="' + (r.total >= 0 ? 'pos' : 'neg') + '"><b>' + r.total + '</b></td></tr>';

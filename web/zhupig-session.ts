@@ -21,15 +21,18 @@ export interface ZpSession {
   matchNo: number;
   /** 每局成绩(供界面显示)*/
   history: Array<{ no: number; finals: number[] }>;
-  /** 有人累计 ≤ stopAt 就结束(默认 -8000)*/
-  stopAt: number;
+  /** 双边界:**有人累计 ≤ stopLow 或 ≥ stopHigh** 就结束(默认 -5000 / +5000)*/
+  stopLow: number;
+  stopHigh: number;
+  /** 到线的是谁、哪一侧(界面显示用)*/
+  stopHit: { seat: number; total: number; side: "low" | "high" } | null;
   /** 连局是否已结束*/
   matchOver: boolean;
 }
 
 const AI_NAMES = ["老六", "芭蕉", "囡囡"];
 
-export function createZpSession(humanSeat = 0, seed = Date.now(), aiKind: ZpAiKind = "greedy", stopAt = -8000): ZpSession {
+export function createZpSession(humanSeat = 0, seed = Date.now(), aiKind: ZpAiKind = "greedy", stopLow = -5000, stopHigh = 5000): ZpSession {
   const seat = Math.max(0, Math.min(3, humanSeat));
   const names = ["你", "你", "你", "你"];
   names[seat] = "你(你)";
@@ -37,7 +40,7 @@ export function createZpSession(humanSeat = 0, seed = Date.now(), aiKind: ZpAiKi
   for (let i = 0; i < 4; i++) if (i !== seat) names[i] = AI_NAMES[ai++ % AI_NAMES.length];
   const st = dealZhupig(CLASSIC_ZHUPIG, names, seed);
   return { st, human: seat, seed, phase: "declare", rng: createRng(seed * 31 + 7), aiKind,
-    matchTotal: [0, 0, 0, 0], matchNo: 1, history: [], stopAt, matchOver: false };
+    matchTotal: [0, 0, 0, 0], matchNo: 1, history: [], stopLow, stopHigh, stopHit: null, matchOver: false };
 }
 
 /** 人类完成亮牌声明 → 开始 */
@@ -60,7 +63,10 @@ export function zpApply(s: ZpSession, seat: number, cardId: string): { ok: boole
     const finals = sc.perSeat.map((p) => p.final);
     finals.forEach((v, i) => { s.matchTotal[i] += v; });
     s.history.push({ no: s.matchNo, finals: finals.slice() });
-    if (s.matchTotal.some((v) => v <= s.stopAt)) s.matchOver = true;
+    const lowSeat = s.matchTotal.findIndex((v) => v <= s.stopLow);
+    const highSeat = s.matchTotal.findIndex((v) => v >= s.stopHigh);
+    if (lowSeat >= 0) { s.matchOver = true; s.stopHit = { seat: lowSeat, total: s.matchTotal[lowSeat], side: "low" }; }
+    else if (highSeat >= 0) { s.matchOver = true; s.stopHit = { seat: highSeat, total: s.matchTotal[highSeat], side: "high" }; }
   }
   return r;
 }
@@ -78,7 +84,7 @@ export function zpRunAiOne(s: ZpSession): boolean {
 
 /** 开下一局(保留累计分与座位)*/
 export function zpNextHand(s: ZpSession): { ok: boolean; error?: string } {
-  if (s.matchOver) return { ok: false, error: "连局已结束(有人到 " + s.stopAt + ")" };
+  if (s.matchOver) return { ok: false, error: "连局已结束(有人到 " + s.stopLow + " / +" + s.stopHigh + ")" };
   if (s.phase !== "over") return { ok: false, error: "本局还没打完" };
   s.matchNo += 1;
   s.st = dealZhupig(CLASSIC_ZHUPIG, s.st.seats.map((p) => p.name), s.seed + s.matchNo * 7919);
@@ -125,7 +131,9 @@ export function zpSeatView(s: ZpSession, seat: number) {
       no: s.matchNo,
       total: s.matchTotal.slice(),
       history: s.history.slice(-10),
-      stopAt: s.stopAt,
+      stopLow: s.stopLow,
+      stopHigh: s.stopHigh,
+      stopHit: s.stopHit ? { ...s.stopHit, name: st.seats[s.stopHit.seat].name } : null,
       over: s.matchOver,
       // 已经有人到线 → 给出最终排名
       ranking: s.matchOver
