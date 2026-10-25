@@ -26,8 +26,22 @@ export function dealZhupig(cfg: ZhupigConfig, names: string[], seed = 1): Zhupig
   const leader = seats.find((s) => s.hand.some((c) => c.id === "DIAMOND-3"))?.seat ?? 0;   // ♦3 先手
   return {
     cfg, seats, leader, turn: leader, trickNo: 1, over: false, ledger: [], discard: [],
+    shown: seats.map(() => new Set<string>()), started: false,
     trick: { ledSuit: "", plays: [], winner: null }, lastTrick: null,
   };
+}
+
+/** 开局亮牌声明:可选地亮出自己手里的特殊牌(亮出后分值变高,但等于公开告诉别人你有) */
+export function declareShow(st: ZhupigState, seat: number, cardIds: string[]): { ok: boolean; error?: string } {
+  if (st.started) return { ok: false, error: "亮牌必须在开局、第一次出牌之前声明" };
+  const hand = st.seats[seat].hand;
+  for (const id of cardIds) {
+    const c = hand.find((x) => x.id === id);
+    if (!c) return { ok: false, error: "手里没有 " + id };
+    if (!isSpecialId(st.cfg, c)) return { ok: false, error: id + " 不是特殊牌,不能亮" };
+  }
+  st.shown[seat] = new Set(cardIds);
+  return { ok: true };
 }
 
 /** 本轮合法牌:有同花色必跟,否则任意(规则原文) */
@@ -46,7 +60,9 @@ export function playZhupig(st: ZhupigState, seat: number, cardId: string, reveal
   if (!legalZhupig(st, seat).some((c) => c.id === cardId)) return { ok: false, error: "有同花色必须跟花色" };
   if (!st.trick.ledSuit) st.trick.ledSuit = card.suit;
   st.seats[seat].hand = st.seats[seat].hand.filter((c) => c.id !== cardId);
-  st.trick.plays.push({ seat, card, revealed });
+  st.started = true;
+  // 亮牌状态由**开局声明**决定(不是出牌时临时选)
+  st.trick.plays.push({ seat, card, revealed: st.shown?.[seat]?.has(card.id) ?? false });
   if (st.trick.plays.length === 4) finishTrick(st);
   else st.turn = (st.turn + 1) % st.cfg.players;
   return { ok: true };

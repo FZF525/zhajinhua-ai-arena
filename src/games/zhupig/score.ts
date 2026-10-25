@@ -94,7 +94,6 @@ export function scoreZhupig(st: ZhupigState): ZpScoreResult {
       else if (e.kind === "snow") {
         const def = sp.snow.find((x) => x.id === e.cardId);
         const v = e.invalid || !def ? 0 : (e.revealed ? def.valueLit : def.value);
-        if (!def || (def.value === 0 && def.valueLit === 0)) ambiguities.push("雪花 " + e.cardId + " 的分值未定义(规格缺口)→ 按 0 计");
         e.value = v; sc.snow += v;
       } else continue;
       if (e.value !== 0) ledger.push("   " + sc.name + " " + e.label + " " + (e.value > 0 ? "+" : "") + e.value);
@@ -177,7 +176,5 @@ export function scoreZhupig(st: ZhupigState): ZpScoreResult {
   }
   ledger.push("   四家总计 " + per.reduce((a, x) => a + x.final, 0) + "(公式恒零和)");
 
-  if (sp.snow.some((s) => s.value === 0 && s.valueLit === 0)) ambiguities.push("雪花 5/10/K 的分值未定(配置仍占位)");
-  if (sp.allRedBonus === 0) ambiguities.push("全红奖励值未定(规格只写'不与原16叠加')");
   return { perSeat: per, ledger, ambiguities: [...new Set(ambiguities)] };
 }

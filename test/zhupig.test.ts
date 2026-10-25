@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createDeck } from "../src/cards.ts";
 import type { Card } from "../src/cards.ts";
 import { CLASSIC_ZHUPIG, type ZhupigState, type ZpPlay } from "../src/games/zhupig/state.ts";
-import { dealZhupig, legalZhupig, playZhupig, checkZhupigInvariants } from "../src/games/zhupig/rules.ts";
+import { dealZhupig, legalZhupig, playZhupig, checkZhupigInvariants, declareShow } from "../src/games/zhupig/rules.ts";
 import { scoreZhupig } from "../src/games/zhupig/score.ts";
 
 const DECK = createDeck();
@@ -132,8 +132,39 @@ test("ZP-13 公式:四家最终总和恒为 0", () => {
   assert.equal(r.perSeat.reduce((a, x) => a + x.final, 0), 0);
 });
 
-test("ZP-14 缺口如实上报(雪花分值 / 全红奖励)", () => {
-  const r = scoreZhupig(mk([[["SNOW-5"]]]));
-  assert.ok(r.ambiguities.some((a) => a.includes("雪花")));
-  assert.ok(r.ambiguities.some((a) => a.includes("全红")));
+test("ZP-14 雪花分值 +5/+10/+20(亮出翻倍)", () => {
+  assert.equal(scoreZhupig(mk([[["SNOW-5"]]])).perSeat[0].snow, 5);
+  assert.equal(scoreZhupig(mk([[["SNOW-10"]]])).perSeat[0].snow, 10);
+  assert.equal(scoreZhupig(mk([[["SNOW-K"]]])).perSeat[0].snow, 20);
+  assert.equal(scoreZhupig(mk([[["SNOW-K", true]]])).perSeat[0].snow, 40, "亮出 K 翻倍 → +40");
+});
+
+test("ZP-15 全红 +200,且**不与原16叠加**", () => {
+  const hearts13: Array<[string, boolean?]> = [...HEARTS_12.map((id) => [id] as [string]), ["HEART-8"]];
+  const cfgNoRed = { ...CLASSIC_ZHUPIG, specials: { ...CLASSIC_ZHUPIG.specials, allRedBonus: 0 } };
+  const withRed = scoreZhupig(mk([hearts13, [], [], []]));
+  const noRed = scoreZhupig(mk([hearts13, [], [], []], cfgNoRed));
+  assert.equal(withRed.perSeat[0].allRed, true, "13 张红桃应当判全红");
+  assert.equal(withRed.perSeat[0].personal - noRed.perSeat[0].personal, 200, "全红 +200");
+  // 原16 齐全时(天然包含全红)→ 只给 +800,不再叠加 +200
+  const full16Pile: Array<[string, boolean?]> = [...hearts13, ["SPADE-Q"], ["DIAMOND-J"], ["CLUB-10"]];
+  const f16 = scoreZhupig(mk([full16Pile, [], [], []]));
+  assert.equal(f16.perSeat[0].full16, true);
+  const f16NoRed = scoreZhupig(mk([full16Pile, [], [], []], cfgNoRed));
+  assert.equal(f16.perSeat[0].personal, f16NoRed.perSeat[0].personal, "原16 齐全时不应再叠加全红 +200");
+});
+
+test("ZP-16 亮牌:开局声明、只能亮手里的特殊牌、开局后禁止再改", () => {
+  const st = dealZhupig(CLASSIC_ZHUPIG, ["A", "B", "C", "D"], 99);
+  // 找一个持有特殊牌的座位
+  const seat = st.seats.findIndex((s) => s.hand.some((c) => c.suit === "HEART" || c.id === "STAR-8" || c.id === "MOON-8" || c.id === "CLUB-10" || c.id.startsWith("SNOW-") || c.id === "DROPLET-9" || c.id === "SPADE-Q" || c.id === "DIAMOND-J"));
+  assert.ok(seat >= 0, "应当有人拿到特殊牌");
+  const special = st.seats[seat].hand.find((c) => c.suit === "HEART") ?? st.seats[seat].hand[0];
+  assert.equal(declareShow(st, seat, [special.id]).ok, true, "开局应当可以亮牌");
+  const nonSpecial = st.seats[seat].hand.find((c) => c.suit !== "HEART" && !["STAR-8", "MOON-8", "CLUB-10", "DROPLET-9", "SPADE-Q", "DIAMOND-J"].includes(c.id) && !c.id.startsWith("SNOW-"));
+  if (nonSpecial) assert.equal(declareShow(st, seat, [nonSpecial.id]).ok, false, "非特殊牌不能亮");
+  // 出第一张牌 → 进入出牌阶段 → 不许再声明
+  const lead = st.turn;
+  assert.equal(playZhupig(st, lead, st.seats[lead].hand[0].id).ok, true);
+  assert.equal(declareShow(st, seat, []).ok, false, "开局之后不能再改亮牌");
 });

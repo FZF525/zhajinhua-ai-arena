@@ -17,7 +17,7 @@ export interface ZhupigSpecials {
   moon8: { id: string; selfDark: number; selfLit: number; cutDark: number; cutLit: number };  // MOON-8 砍前驱
   /** 红桃(HEART 花色)按点数的分值 —— 待作者确认;这里用经典拱猪表 */
   hearts: Record<number, number>;                    // rank 2..14
-  allRedBonus: number;                               // 全红奖励 —— 待作者确认
+    allRedBonus: 200,                              // 作者定稿:全红 +200,不与原16叠加
   full16Bonus: number;                               // 原16 齐全 +800(**在公式之前**加到个人分)
 }
 
@@ -34,6 +34,10 @@ export interface ZhupigState {
   leader: number; turn: number; trickNo: number;
   discard: Card[];
   over: boolean;
+  /** 开局亮牌声明:每座位声明"我亮哪几张特殊牌"(cardId 集合)。**开局一次性决定**,不是出牌时选 ✓ */
+  shown: Array<Set<string>>;
+  /** 是否已进入出牌阶段(亮牌声明必须在第一次出牌之前完成) */
+  started: boolean;
   ledger: string[];
 }
 
@@ -50,15 +54,15 @@ export const CLASSIC_ZHUPIG: ZhupigConfig = {
     sheep: { id: "DIAMOND-J", value: 100 },
     transformer: { id: "CLUB-10", mul: 2, mulLit: 4, flat: 50, flatLit: 100 },
     snow: [
-      { id: "SNOW-5", value: 0, valueLit: 0 },     // TODO 分值待作者确认
-      { id: "SNOW-10", value: 0, valueLit: 0 },    // TODO
-      { id: "SNOW-K", value: 0, valueLit: 0 },    // TODO
+      { id: "SNOW-5", value: 5, valueLit: 10 },    // 作者定稿:雪花 5 = +5(亮出翻倍 = +10)
+      { id: "SNOW-10", value: 10, valueLit: 20 },   // 作者定稿:雪花 10 = +10(亮出翻倍 = +20)
+      { id: "SNOW-K", value: 20, valueLit: 40 },    // 作者定稿:雪花 K = +20(亮出翻倍 = +40)
     ],
     water9: { id: "DROPLET-9" },
     star8: { id: "STAR-8", selfDark: -25, selfLit: -50, cutDark: 1, cutLit: 2 },
     moon8: { id: "MOON-8", selfDark: -25, selfLit: -50, cutDark: 1, cutLit: 2 },
     hearts: CLASSIC_HEARTS,
-    allRedBonus: 0,                                // TODO 待作者确认
+    allRedBonus: 200,                              // 作者定稿:全红 +200,不与原16叠加
     full16Bonus: 800,
   },
 };
