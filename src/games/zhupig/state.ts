@@ -19,6 +19,10 @@ export interface ZhupigSpecials {
   hearts: Record<number, number>;                    // rank 2..14(定稿:经典拱猪表)
     allRedBonus: 200,                              // 作者定稿:全红 +200,不与原16叠加
   full16Bonus: number;                               // 原16 齐全 +800(**在公式之前**加到个人分)
+  /** ★ 只有这些牌可以"亮牌":红桃门主 ♥A、雪花门主 SNOW-K,以及自身有亮出效果的 变压器/水滴9/星8/月8 */
+  revealable: string[];
+  /** ★ 门主加倍:亮出 ♥A → 全场红桃 ×2;亮出 SNOW-K → 全场雪花 ×2 */
+  suitDouble: Array<{ cardId: string; suit: string }>;
 }
 
 export interface ZhupigConfig { players: 4; specials: ZhupigSpecials; formulaMul: number; }
@@ -64,6 +68,10 @@ export const CLASSIC_ZHUPIG: ZhupigConfig = {
     hearts: CLASSIC_HEARTS,
     allRedBonus: 200,                              // 作者定稿:全红 +200,不与原16叠加
     full16Bonus: 800,
+    // 作者定稿:可亮的只有这些(♥4 / SNOW-5 / SNOW-10 / 猪 / 羊 都不许亮)
+    revealable: ["HEART-A", "SNOW-K", "CLUB-10", "DROPLET-9", "STAR-8", "MOON-8"],
+    // 门主加倍:亮出后**整个花色**翻倍(不只是自己那张)
+    suitDouble: [{ cardId: "HEART-A", suit: "HEART" }, { cardId: "SNOW-K", suit: "SNOW" }],
   },
 };
 

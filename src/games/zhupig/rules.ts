@@ -10,6 +10,11 @@ export function isSpecialId(cfg: ZhupigConfig, card: Card): boolean {
   return ids.includes(card.id) || card.suit === "HEART";
 }
 
+/** 只有配置里的"门主/亮出有效果"的牌可以亮 */
+export function isRevealable(cfg: ZhupigConfig, card: Card): boolean {
+  return cfg.specials.revealable.includes(card.id);
+}
+
 export function dealZhupig(cfg: ZhupigConfig, names: string[], seed = 1): ZhupigState {
   const deck = createDeck();                        // 104 张 = 8 门 × 13
   const rng = createRng(seed);
@@ -38,7 +43,7 @@ export function declareShow(st: ZhupigState, seat: number, cardIds: string[]): {
   for (const id of cardIds) {
     const c = hand.find((x) => x.id === id);
     if (!c) return { ok: false, error: "手里没有 " + id };
-    if (!isSpecialId(st.cfg, c)) return { ok: false, error: id + " 不是特殊牌,不能亮" };
+    if (!isRevealable(st.cfg, c)) return { ok: false, error: id + " 不能亮牌 —— 只有 ♥A / SNOW-K / 变压器 / 水滴9 / 星8 / 月8 可以亮" };
   }
   st.shown[seat] = new Set(cardIds);
   return { ok: true };

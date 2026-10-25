@@ -154,30 +154,50 @@ test("ZP-15 全红 +200,且**不与原16叠加**", () => {
   assert.equal(f16.perSeat[0].personal, f16NoRed.perSeat[0].personal, "原16 齐全时不应再叠加全红 +200");
 });
 
-test("ZP-16 亮牌:开局声明、只能亮手里的特殊牌、开局后禁止再改", () => {
+test("ZP-16 亮牌:只能亮门主与有亮出效果的牌(♥4 不许亮),且必须在开局前", () => {
   const st = dealZhupig(CLASSIC_ZHUPIG, ["A", "B", "C", "D"], 99);
-  // 找一个持有特殊牌的座位
-  const seat = st.seats.findIndex((s) => s.hand.some((c) => c.suit === "HEART" || c.id === "STAR-8" || c.id === "MOON-8" || c.id === "CLUB-10" || c.id.startsWith("SNOW-") || c.id === "DROPLET-9" || c.id === "SPADE-Q" || c.id === "DIAMOND-J"));
-  assert.ok(seat >= 0, "应当有人拿到特殊牌");
-  const special = st.seats[seat].hand.find((c) => c.suit === "HEART") ?? st.seats[seat].hand[0];
-  assert.equal(declareShow(st, seat, [special.id]).ok, true, "开局应当可以亮牌");
-  const nonSpecial = st.seats[seat].hand.find((c) => c.suit !== "HEART" && !["STAR-8", "MOON-8", "CLUB-10", "DROPLET-9", "SPADE-Q", "DIAMOND-J"].includes(c.id) && !c.id.startsWith("SNOW-"));
-  if (nonSpecial) assert.equal(declareShow(st, seat, [nonSpecial.id]).ok, false, "非特殊牌不能亮");
-  // 出第一张牌 → 进入出牌阶段 → 不许再声明
+  // 造一手可测的牌:确保手里有 ♥4 和 ♥A
+  const s0 = st.seats[0];
+  s0.hand = [C("HEART-4"), C("HEART-A"), C("SNOW-K"), C("SNOW-5"), C("SPADE-2")];
+  assert.equal(declareShow(st, 0, ["HEART-4"]).ok, false, "♥4 不许亮");
+  assert.equal(declareShow(st, 0, ["SNOW-5"]).ok, false, "雪花 5 不许亮(只有雪花门主 K 能亮)");
+  assert.equal(declareShow(st, 0, ["HEART-A"]).ok, true, "♥A 可以亮");
+  assert.equal(declareShow(st, 0, ["SNOW-K"]).ok, true, "SNOW-K 可以亮");
+  // 开局后不许再改
   const lead = st.turn;
-  assert.equal(playZhupig(st, lead, st.seats[lead].hand[0].id).ok, true);
-  assert.equal(declareShow(st, seat, []).ok, false, "开局之后不能再改亮牌");
+  const firstLegal = legalZhupig(st, lead)[0];
+  playZhupig(st, lead, firstLegal.id);
+  assert.equal(declareShow(st, 0, []).ok, false, "开局之后不能再改亮牌");
 });
 
-test("ZP-17 水滴减半/1/4 保留小数(不定稿取整)", () => {
-  // 个人分 5 → 减半 = 2.5(变动 -2.5)
-  const half = scoreZhupig(mk([[["HEART-5"]]]));
-  assert.equal(half.perSeat[0].personal, 10, "先确认单张红桃5 = 10");
-  // 用雪花5(+5)凑出奇数个人分:个人分 5 → 水滴减半 → 2.5
-  const odd = scoreZhupig(mk([[["SNOW-5"], ["DROPLET-9"]]]));
-  assert.equal(odd.perSeat[0].water9, -2.5, "5 → 减半 → 变动 -2.5");
-  assert.equal(odd.perSeat[0].personal, 2.5, "个人分应当保留小数 2.5");
-  const quarter = scoreZhupig(mk([[["SNOW-5"], ["DROPLET-9", true]]]));
-  assert.equal(quarter.perSeat[0].water9, -3.75, "5 → 1/4 → 变动 -3.75");
-  assert.equal(quarter.perSeat[0].personal, 1.25, "保留小数 1.25");
+test("ZP-18 亮出 ♥A → 全场红桃分值 ×2(不只是自己那张)", () => {
+  // 甲亮 ♥A 且自己收了 ♥A + ♥5;乙收了 ♥K —— 两边都应当翻倍(作者:其他同花色分牌都翻倍)
+  const r = scoreZhupig(mk([
+    [["HEART-A", true], ["HEART-5"]],        // 甲:亮出的 ♥A(50→100)+ ♥5(10→20)
+    [["HEART-K"]],                            // 乙:♥K 40 → 80(全场加倍)
+    [["SNOW-5"]],                             // 雪花不受影响
+    [],
+  ]));
+  assert.equal(r.perSeat[0].heartsEffective, 100 + 20, "甲的红桃应当 ×2");
+  assert.equal(r.perSeat[1].heartsEffective, 80, "乙的红桃也应当 ×2(全场)");
+  assert.equal(r.perSeat[2].snow, 5, "雪花不受红桃门主影响");
+});
+
+test("ZP-19 亮出 SNOW-K → 全场雪花分值 ×2;红桃不受影响", () => {
+  const r = scoreZhupig(mk([
+    [["SNOW-K", true], ["SNOW-5"]],          // 甲:SNOW-K 20→40,SNOW-5 5→10
+    [["SNOW-10"]],                            // 乙:SNOW-10 10→20(全场)
+    [["HEART-5"]],                            // 红桃不受影响
+    [],
+  ]));
+  assert.equal(r.perSeat[0].snow, 40 + 10, "甲的雪花 ×2");
+  assert.equal(r.perSeat[1].snow, 20, "乙的雪花也 ×2");
+  assert.equal(r.perSeat[2].heartsEffective, 10, "红桃不受雪花门主影响");
+});
+
+test("ZP-20 其他特殊牌的自身亮出效果仍然生效(变压器 ×4 / 水滴 1/4),不受门主影响", () => {
+  const litTransformer = scoreZhupig(mk([[["HEART-5"], ["CLUB-10", true]]]));
+  assert.equal(litTransformer.perSeat[0].transformer, 30, "红桃 10 → 亮出变压器 ×4 → 追加 30");
+  const litWater = scoreZhupig(mk([[["SNOW-5"], ["DROPLET-9", true]]]));
+  assert.equal(litWater.perSeat[0].water9, -3.75, "个人分 5 → 水滴 1/4 → 变动 -3.75");
 });

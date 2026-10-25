@@ -6,7 +6,7 @@
 > **English?** A self-contained English overview is at **[docs/README.en.md](docs/README.en.md)**(project summary, quick start, measured findings).
 
 [![CI](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-185%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-187%20passed-brightgreen)
 ![node](https://img.shields.io/badge/node-%E2%89%A522.18-blue)
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
@@ -21,7 +21,7 @@
 | | |
 | --- | --- |
 | **规则** | 104 张牌(13 级 × 8 花色)/ **12 档牌型** / 闷牌看牌 / 比牌 / 踢牌封锁轮 / 挂起式截胡 |
-| **测试** | **186 条**(185 通过 / 1 条穷举默认跳过),含 **91,962,520 手牌全枚举**校验 |
+| **测试** | **188 条**(187 通过 / 1 条穷举默认跳过),含 **91,962,520 手牌全枚举**校验 |
 | **依赖** | **0** —— Node ≥ 22.18 原生跑 `.ts`,`git clone` 后**无需 `npm install`** |
 | **AI** | **10 个**:规则型 3 · 蒙特卡洛 3 · 精确胜率 3 · 自对弈学习 1 |
 | **擂台** | 循环赛排名 · 单点基准 · 上帝视角观战 · 时间轴回放 · 对局存档(约 25 KB/局) |
@@ -49,7 +49,7 @@ node examples/tournament.ts 3 5        # 10 个 AI 循环赛排名
 | 跟牌 | **有同花色必跟**,无同花色可贴任意牌 |
 | 牌权 | 所跟花色中点数最大者赢;**贴牌一律算最后(不能赢)** |
 | 收牌 | 该轮里的**特殊牌**进入赢家收牌堆 |
-| 亮牌 | **开局声明**(可亮手里的特殊牌,亮出分值变高但全桌可见) |
+| 亮牌 | **开局声明**,且**只有门主与有亮出效果的牌能亮**:**♥A**(亮出→**全场红桃 ×2**)· **SNOW-K**(亮出→**全场雪花 ×2**)· 变压器 / 水滴9 / 星8 / 月8(亮出改自身效果)。**♥4、SNOW-5/10、猪、羊 都不能亮** |
 
 **特殊牌**:猪(♠Q −100)· 羊(♦J +100)· 变压器(♣10:有有效红桃 ×2 / 无红桃 +50)· 雪花(SNOW 5/10/K = +5/+10/+20)· 水滴9(DROPLET-9:个人分减半 / 为 0 则 −50)· 星星8(STAR-8 砍**后继**)· 月牙8(MOON-8 砍**前驱**)
 

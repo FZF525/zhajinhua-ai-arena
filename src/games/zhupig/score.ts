@@ -85,6 +85,23 @@ export function scoreZhupig(st: ZhupigState): ZpScoreResult {
     }
   }
 
+  // ── ①.5 门主加倍(★作者定稿:亮出 ♥A → 全场红桃 ×2;亮出 SNOW-K → 全场雪花 ×2)──
+  let heartsDoubled = false, snowsDoubled = false;
+  for (const seat of per) {
+    for (const e of seat.entries) {
+      if (!e.revealed) continue;
+      for (const d of cfg.specials.suitDouble) {
+        if (e.cardId === d.cardId) {
+          if (d.suit === "HEART") heartsDoubled = true;
+          if (d.suit === "SNOW") snowsDoubled = true;
+          ledger.push("   ★ " + seat.name + " 亮出了门主 " + e.cardId + " → 全场 " + d.suit + " 花色分值 ×2");
+        }
+      }
+    }
+  }
+  const heartMul = heartsDoubled ? 2 : 1;
+  const snowMul = snowsDoubled ? 2 : 1;
+
   // ── ② 猪 / 羊 / 雪花 ──
   ledger.push("② 猪 / 羊 / 雪花");
   for (const sc of per) {
@@ -93,7 +110,7 @@ export function scoreZhupig(st: ZhupigState): ZpScoreResult {
       else if (e.kind === "sheep") { e.value = e.invalid ? 0 : sp.sheep.value; sc.sheep += e.value; }
       else if (e.kind === "snow") {
         const def = sp.snow.find((x) => x.id === e.cardId);
-        const v = e.invalid || !def ? 0 : (e.revealed ? def.valueLit : def.value);
+        const v = e.invalid || !def ? 0 : def.value * snowMul;   // 门主亮出 → 全场雪花 ×2
         e.value = v; sc.snow += v;
       } else continue;
       if (e.value !== 0) ledger.push("   " + sc.name + " " + e.label + " " + (e.value > 0 ? "+" : "") + e.value);
@@ -109,7 +126,8 @@ export function scoreZhupig(st: ZhupigState): ZpScoreResult {
       const r = rankValue(e.cardId.split("-")[1] ?? "");
       const v = sp.hearts[r];
       if (v === undefined) ambiguities.push("红桃 " + e.cardId + " 的分值未定义");
-      e.heartValue = v ?? 0; sc.heartsEffective += e.heartValue;
+      e.heartValue = (v ?? 0) * heartMul;   // 门主亮出 → 全场红桃 ×2
+      sc.heartsEffective += e.heartValue;
     }
     const validHearts = sc.entries.filter((e) => e.kind === "heart" && !e.invalid).length;
     const totalHearts = sc.entries.filter((e) => e.kind === "heart").length;

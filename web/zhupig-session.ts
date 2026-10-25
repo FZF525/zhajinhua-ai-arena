@@ -2,7 +2,7 @@
 import { createRng } from "../src/rng.ts";
 import { CLASSIC_ZHUPIG, type ZhupigState, rankLabel } from "../src/games/zhupig/state.ts";
 import { SUITS } from "../src/cards.ts";
-import { dealZhupig, legalZhupig, playZhupig, declareShow, isSpecialId } from "../src/games/zhupig/rules.ts";
+import { dealZhupig, legalZhupig, playZhupig, declareShow, isSpecialId, isRevealable } from "../src/games/zhupig/rules.ts";
 import { scoreZhupig } from "../src/games/zhupig/score.ts";
 import { zpAiChoose, zpAiDeclare } from "../src/games/zhupig/ai.ts";
 
@@ -73,6 +73,8 @@ export function zpSeatView(s: ZpSession, seat: number) {
     hand: me.hand.map((c) => cardView(st, c)),
     legalIds: legal,
     declared: [...(st.shown[seat] ?? [])],
+    /** 只有这些手牌可以亮(门主 + 自身有亮出效果的牌)*/
+    revealableIds: me.hand.filter((c) => isRevealable(st.cfg, c)).map((c) => c.id),
     trick: st.trick.plays.map((p) => ({ seat: p.seat, name: st.seats[p.seat].name, card: cardView(st, p.card) })),
     lastTrick: st.lastTrick ? { winner: st.lastTrick.winner, winnerName: st.seats[st.lastTrick.winner ?? 0].name, plays: st.lastTrick.plays.map((p) => ({ name: st.seats[p.seat].name, card: cardView(st, p.card) })) } : null,
     seats: st.seats.map((p) => ({

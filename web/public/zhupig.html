@@ -55,7 +55,7 @@
 <div id="declare" style="display:none">
   <b>开局亮牌</b><span style="color:var(--dim);font-size:12px"> —— 亮出的特殊牌分值变高,但全桌都会知道你有</span>
   <div class="row" id="picks"></div>
-  <div style="color:var(--dim);font-size:12px">提示:雪花亮出翻倍;猪/星刀/月刀/水滴亮出只会更糟</div>
+  <div style="color:var(--dim);font-size:12px">提示:亮出 ♥A → **全场红桃 ×2**;亮出 SNOW-K → **全场雪花 ×2**;刀刃/水滴亮出只会更糟</div>
   <div style="margin-top:10px"><button id="startBtn" class="primary">开始(不亮的也可以直接开始)</button></div>
 </div>
 
@@ -107,10 +107,10 @@ function render() {
   // 亮牌面板
   $('declare').style.display = view.canDeclare ? 'block' : 'none';
   if (view.canDeclare) {
-    var specials = view.hand.filter(function (c) { return c.special; });
+    var specials = view.hand.filter(function (c) { return (view.revealableIds || []).indexOf(c.id) >= 0; });
     $('picks').innerHTML = specials.length ? specials.map(function (c) {
       return '<div class="pick ' + (picks.has(c.id) ? 'on' : '') + '" data-id="' + c.id + '">' + c.text + '</div>';
-    }).join('') : '<span style="color:var(--dim)">你手里没有特殊牌,直接开始即可</span>';
+    }).join('') : '<span style="color:var(--dim)">你手里没有可亮的牌(只有 ♥A / SNOW-K / 变压器 / 水滴9 / 星8 / 月8 可亮),直接开始即可</span>';
     Array.prototype.forEach.call(document.querySelectorAll('.pick'), function (el) {
       el.onclick = function () {
         var id = el.getAttribute('data-id');

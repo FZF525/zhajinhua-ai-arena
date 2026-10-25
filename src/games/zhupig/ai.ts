@@ -23,12 +23,9 @@ export function zpCardValue(st: ZhupigState, c: Card): number {
   return 0;
 }
 
-/** 开局亮牌:只亮雪花(正分翻倍);从不亮猪/刀刃/水滴(亮出只会更糟)*/
+/** 开局亮牌:只亮雪花门主 SNOW-K(全场雪花 ×2,自己通常也能沾到);从不亮刀刃/水滴(亮出更糟)*/
 export function zpAiDeclare(st: ZhupigState, seat: number): string[] {
-  const sp = st.cfg.specials;
-  return st.seats[seat].hand
-    .filter((c) => sp.snow.some((s) => s.id === c.id))
-    .map((c) => c.id);
+  return st.seats[seat].hand.filter((c) => c.id === "SNOW-K").map((c) => c.id);
 }
 
 /** 出牌:能赢就抢正分轮,负分轮就躲 */
