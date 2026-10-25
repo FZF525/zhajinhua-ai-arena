@@ -11,12 +11,12 @@ export interface ZhupigSpecials {
   pig: { id: string; value: number };               // 经典:SPADE-12(-100)
   sheep: { id: string; value: number };             // 经典:DIAMOND-11(+100)
   transformer: { id: string; mul: number; mulLit: number; flat: number; flatLit: number };  // CLUB-10
-  snow: Array<{ id: string; value: number; valueLit: number }>;   // SNOW-5/10/13  ← 分值待作者确认
+  snow: Array<{ id: string; value: number; valueLit: number }>;   // SNOW-5/10/K(定稿:+5/+10/+20,亮出翻倍)
   water9: { id: string };                            // DROPLET-9
   star8: { id: string; selfDark: number; selfLit: number; cutDark: number; cutLit: number };  // STAR-8 砍后继
   moon8: { id: string; selfDark: number; selfLit: number; cutDark: number; cutLit: number };  // MOON-8 砍前驱
   /** 红桃(HEART 花色)按点数的分值 —— 待作者确认;这里用经典拱猪表 */
-  hearts: Record<number, number>;                    // rank 2..14
+  hearts: Record<number, number>;                    // rank 2..14(定稿:经典拱猪表)
     allRedBonus: 200,                              // 作者定稿:全红 +200,不与原16叠加
   full16Bonus: number;                               // 原16 齐全 +800(**在公式之前**加到个人分)
 }

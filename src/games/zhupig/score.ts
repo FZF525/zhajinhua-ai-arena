@@ -145,7 +145,6 @@ export function scoreZhupig(st: ZhupigState): ZpScoreResult {
       if (soFar !== 0) {
         sc.water9 = soFar / (e.revealed ? 4 : 2) - soFar; e.value = sc.water9;
         ledger.push("   " + sc.name + " 个人分 " + soFar + " ≠ 0 → 水滴" + (e.revealed ? "1/4" : "减半") + "(变动 " + sc.water9 + ")");
-        if (!Number.isInteger(sc.water9)) ambiguities.push("水滴减半产生小数(" + sc.water9 + ")—— 取整方式未定义");
       } else {
         sc.water9 = e.revealed ? -100 : -50; e.value = sc.water9;
         ledger.push("   " + sc.name + " 个人分 = 0 → 水滴 " + sc.water9);

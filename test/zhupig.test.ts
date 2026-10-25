@@ -168,3 +168,16 @@ test("ZP-16 亮牌:开局声明、只能亮手里的特殊牌、开局后禁止�
   assert.equal(playZhupig(st, lead, st.seats[lead].hand[0].id).ok, true);
   assert.equal(declareShow(st, seat, []).ok, false, "开局之后不能再改亮牌");
 });
+
+test("ZP-17 水滴减半/1/4 保留小数(不定稿取整)", () => {
+  // 个人分 5 → 减半 = 2.5(变动 -2.5)
+  const half = scoreZhupig(mk([[["HEART-5"]]]));
+  assert.equal(half.perSeat[0].personal, 10, "先确认单张红桃5 = 10");
+  // 用雪花5(+5)凑出奇数个人分:个人分 5 → 水滴减半 → 2.5
+  const odd = scoreZhupig(mk([[["SNOW-5"], ["DROPLET-9"]]]));
+  assert.equal(odd.perSeat[0].water9, -2.5, "5 → 减半 → 变动 -2.5");
+  assert.equal(odd.perSeat[0].personal, 2.5, "个人分应当保留小数 2.5");
+  const quarter = scoreZhupig(mk([[["SNOW-5"], ["DROPLET-9", true]]]));
+  assert.equal(quarter.perSeat[0].water9, -3.75, "5 → 1/4 → 变动 -3.75");
+  assert.equal(quarter.perSeat[0].personal, 1.25, "保留小数 1.25");
+});
