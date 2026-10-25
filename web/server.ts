@@ -24,6 +24,8 @@ import { ENGINE_VERSION } from "../src/version.ts";
 import { actorOf, buildView, viewerSeatFor } from "./view.ts";
 import { createBluffSession, bluffSeatView, bluffApply, bluffRunAiOne, parseSeatKinds, CHALLENGE_PRESETS } from "./bluff-session.ts";
 import type { BluffSession } from "./bluff-session.ts";
+import { createZpSession, zpDeclareHuman, zpApply, zpRunAiOne, zpSeatView } from "./zhupig-session.ts";
+import type { ZpSession } from "./zhupig-session.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(HERE, "public");
@@ -143,6 +145,7 @@ function stepOnce(): { ok: boolean; reason?: string; acted?: number; events?: st
 }
 
 let bluff: BluffSession | null = null;
+let zhupig: ZpSession | null = null;
 
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
 
@@ -213,6 +216,48 @@ const server = http.createServer(async (req, res) => {
     }
     return sendJson(res, 200, { ok: true, view: bluffSeatView(bluff, seat) });
   }
+
+  // ---- 八门拱猪·星月版(与前面两个游戏完全分开)----
+  if (path === "/zhupig" || path === "/zhupig/") {
+    return send(res, 200, readFileSync(join(PUBLIC, "zhupig.html"), "utf8"), MIME[".html"]);
+  }
+  if (path === "/api/zhupig/new" && req.method === "POST") {
+    const body = await readBody(req);
+    const seat = Math.max(0, Math.min(3, Number(body.seat ?? 0)));
+    zhupig = createZpSession(seat, Number(body.seed ?? Date.now()));
+    return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
+  }
+  if (path === "/api/zhupig/declare" && req.method === "POST") {
+    if (!zhupig) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    const body = await readBody(req);
+    const seat = Math.max(0, Math.min(3, Number(body.seat ?? zhupig.human)));
+    const ids = Array.isArray(body.cardIds) ? body.cardIds.map(String) : [];
+    const r = zpDeclareHuman(zhupig, ids);
+    if (!r.ok) return sendJson(res, 200, { ok: false, error: r.error });
+    return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
+  }
+  if (path === "/api/zhupig/state") {
+    if (!zhupig) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    const seat = Math.max(0, Math.min(3, Number(url.searchParams.get("seat") ?? zhupig.human)));
+    return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
+  }
+  if (path === "/api/zhupig/action" && req.method === "POST") {
+    if (!zhupig) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    const body = await readBody(req);
+    const seat = Math.max(0, Math.min(3, Number(body.seat ?? zhupig.human)));
+    const r = zpApply(zhupig, seat, String(body.cardId ?? ""));
+    if (!r.ok) return sendJson(res, 200, { ok: false, error: r.error });
+    return sendJson(res, 200, { ok: true, view: zpSeatView(zhupig, seat) });
+  }
+  if (path === "/api/zhupig/step" && req.method === "POST") {
+    if (!zhupig) return sendJson(res, 200, { ok: false, error: "还没有开局" });
+    const body = await readBody(req);
+    const seat = Math.max(0, Math.min(3, Number(body.seat ?? zhupig.human)));
+    let moved = false;
+    try { moved = zpRunAiOne(zhupig); } catch (e) { return sendJson(res, 200, { ok: false, error: String(e) }); }
+    return sendJson(res, 200, { ok: true, moved, view: zpSeatView(zhupig, seat) });
+  }
+
 
   try {
     if (path === "/api/new" && req.method === "POST") {
@@ -313,6 +358,7 @@ server.listen(PORT, HOST, () => {
   const shown = HOST === "0.0.0.0" ? "0.0.0.0" : HOST;
   console.log("炸金花 Web UI " + ENGINE_VERSION + ": http://" + shown + ":" + PORT);
   console.log("唬牌 Bluff(另一个游戏,同一进程): http://" + shown + ":" + PORT + "/bluff");
+  console.log("八门拱猪·星月版: http://" + shown + ":" + PORT + "/zhupig");
   if (HOST === "0.0.0.0") console.log("(已开放局域网:用同网段设备的 IP:" + PORT + "/bluff 即可多人各自一台)");
   else console.log("(只绑本机;想局域网多设备玩热座,加 --host=0.0.0.0)");
   console.log("(改过引擎/view 后必须重启本进程,浏览器刷新不会更新服务端代码)");

@@ -6,7 +6,7 @@
 > **English?** A self-contained English overview is at **[docs/README.en.md](docs/README.en.md)**(project summary, quick start, measured findings).
 
 [![CI](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/FZF525/zhajinhua-ai-arena/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-167%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-185%20passed-brightgreen)
 ![node](https://img.shields.io/badge/node-%E2%89%A522.18-blue)
 ![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-blue)
@@ -21,7 +21,7 @@
 | | |
 | --- | --- |
 | **规则** | 104 张牌(13 级 × 8 花色)/ **12 档牌型** / 闷牌看牌 / 比牌 / 踢牌封锁轮 / 挂起式截胡 |
-| **测试** | **168 条**(167 通过 / 1 条穷举默认跳过),含 **91,962,520 手牌全枚举**校验 |
+| **测试** | **186 条**(185 通过 / 1 条穷举默认跳过),含 **91,962,520 手牌全枚举**校验 |
 | **依赖** | **0** —— Node ≥ 22.18 原生跑 `.ts`,`git clone` 后**无需 `npm install`** |
 | **AI** | **10 个**:规则型 3 · 蒙特卡洛 3 · 精确胜率 3 · 自对弈学习 1 |
 | **擂台** | 循环赛排名 · 单点基准 · 上帝视角观战 · 时间轴回放 · 对局存档(约 25 KB/局) |
@@ -37,6 +37,31 @@ node src/cli.ts --ai=human,Sam,May     # 命令行:你 + 2 个 AI
 node web/server.ts                     # 浏览器:玩 / 观战 / 回放
 node examples/tournament.ts 3 5        # 10 个 AI 循环赛排名
 ```
+
+## 八门拱猪 · 星月版(实测可玩,网页已接)
+
+**"八门" = 本牌的 8 个花色**:红心/方块/黑桃/梅花 + **雪花/水滴/星/月牙** ✓
+
+| 项 | 规则 |
+|---|---|
+| 牌堆 | 104 张(8 门 × 13),**4 人各 26 张** |
+| 先手 | **♦3 在手者**先出;每轮出 1 张 |
+| 跟牌 | **有同花色必跟**,无同花色可贴任意牌 |
+| 牌权 | 所跟花色中点数最大者赢;**贴牌一律算最后(不能赢)** |
+| 收牌 | 该轮里的**特殊牌**进入赢家收牌堆 |
+| 亮牌 | **开局声明**(可亮手里的特殊牌,亮出分值变高但全桌可见) |
+
+**特殊牌**:猪(♠Q −100)· 羊(♦J +100)· 变压器(♣10:有有效红桃 ×2 / 无红桃 +50)· 雪花(SNOW 5/10/K = +5/+10/+20)· 水滴9(DROPLET-9:个人分减半 / 为 0 则 −50)· 星星8(STAR-8 砍**后继**)· 月牙8(MOON-8 砍**前驱**)
+
+**结算顺序(固定,不可重排)**:① 星月刀 → ② 猪羊雪花 → ③ 有效红桃 → ④ 变压器 → ⑤ 水滴9 → ⑥ 原16(+800) → ⑦ 公式
+**公式**:最终 = 个人分×**3** − 其余三家个人和(**恒零和**;+800 在公式前 → 实际价值 2400)
+
+```bash
+node web/server.ts      # 打开 http://127.0.0.1:8787/zhupig
+node examples/zhupig-random.ts 1000   # 随机跑 1000 局(自检 + 分布)
+```
+
+实测(1000 局随机):不变量/零和 **0 异常**;最终得分标准差 **410.7**,分位 **−1245 ~ +2855**;原16 随机下 **0%**;星/月各 25% 人次 ✓
 
 ## 唬牌 Bluff · 玩法速查(另一个游戏,同一个服务端)
 

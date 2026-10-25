@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>八门拱猪·星月版</title>
+<link rel="stylesheet" href="/style.css" />
+<style>
+  body { background:#0b1016; color:#dbe4ee; font-family:system-ui,"Microsoft YaHei",sans-serif; margin:0; padding:12px 16px 40px; }
+  h1 { font-size:18px; margin:0 0 8px; }
+  h1 small { color:var(--dim); font-weight:400; font-size:12px; margin-left:8px; }
+  .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  button { background:#1b2530; color:#dbe4ee; border:1px solid var(--line); border-radius:8px; padding:6px 12px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--gold); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { background:#2a3a2c; border-color:#3f6a44; }
+  #seats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
+  .seat { background:#111820; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+  .seat.active { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
+  .seat .n { font-weight:600; font-size:13px; }
+  .seat .c { color:var(--dim); font-size:12px; }
+  #trick { display:flex; gap:8px; min-height:92px; align-items:center; padding:8px; background:#0e141b; border:1px dashed var(--line); border-radius:10px; margin-bottom:10px; }
+  #trick .slot { text-align:center; }
+  #trick .who { font-size:11px; color:var(--dim); margin-bottom:4px; }
+  #banner { min-height:22px; color:#9fe6b3; font-size:13px; margin-bottom:8px; }
+  #hand { display:flex; flex-wrap:wrap; gap:5px; }
+  .badge { display:inline-block; font-size:10px; padding:0 4px; border-radius:4px; background:#3a2a12; color:#ffcf6b; margin-left:3px; }
+  .card.special { outline:2px solid #b8790a; }
+  .card.declared { box-shadow:0 0 0 3px #e06c75; }
+  .card.legal { cursor:pointer; box-shadow:0 0 0 2px rgba(255,207,107,.35); }
+  .card.legal:hover { transform:translateY(-4px); }
+  .card.illegal { opacity:.35; }
+  #declare { background:#111820; border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; }
+  #declare .row { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+  #declare .pick { border:1px solid var(--line); border-radius:8px; padding:4px 8px; cursor:pointer; font-size:12px; }
+  #declare .pick.on { border-color:var(--gold); background:#2a2213; }
+  #score { background:#111820; border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:14px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th,td { border:1px solid var(--line); padding:4px 8px; text-align:center; }
+  .pos { color:#98c379; } .neg { color:#e06c75; }
+  #ledger { margin-top:10px; max-height:260px; overflow:auto; font-size:12px; line-height:1.7; color:#aab6c4; white-space:pre-wrap; background:#0b1016; border:1px solid var(--line); border-radius:8px; padding:8px; }
+</style>
+</head>
+<body>
+<h1>八门拱猪 · 星月版 <small>104 张 / 8 门 / 4 人各 26 张 · ♦3 先手 · 贴牌算最后</small></h1>
+<div class="bar">
+  <button id="newBtn" class="primary">新开一局</button>
+  <span id="phase" style="color:var(--dim);font-size:13px"></span>
+</div>
+
+<div id="seats"></div>
+<div id="trick"></div>
+<div id="banner"></div>
+
+<div id="declare" style="display:none">
+  <b>开局亮牌</b><span style="color:var(--dim);font-size:12px"> —— 亮出的特殊牌分值变高,但全桌都会知道你有</span>
+  <div class="row" id="picks"></div>
+  <div style="color:var(--dim);font-size:12px">提示:雪花亮出翻倍;猪/星刀/月刀/水滴亮出只会更糟</div>
+  <div style="margin-top:10px"><button id="startBtn" class="primary">开始(不亮的也可以直接开始)</button></div>
+</div>
+
+<div id="hand"></div>
+
+<div id="score" style="display:none"></div>
+
+<script>
+var seat = 0;
+var view = null;
+var picks = new Set();
+var busy = false;
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+function toast(m) { $('banner').textContent = m; }
+function fam(f) { return (f || 'BLACK').toLowerCase(); }
+
+function api(path, body) {
+  return fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+}
+
+function cardHtml(c, cls) {
+  var extra = (c.special ? ' special' : '') + (c.declared ? ' declared' : '') + (cls ? ' ' + cls : '');
+  return '<div class="card ' + fam(c.family) + extra + '" data-id="' + c.id + '" title="' + esc(c.id) + '">' + c.text + '</div>';
+}
+
+function render() {
+  if (!view) return;
+  var turnName = view.seats[view.turn] ? view.seats[view.turn].name : '?';
+  $('phase').textContent = view.phase === 'declare'
+    ? '第 1 步:开局亮牌'
+    : view.phase === 'over'
+      ? '本局结束'
+      : '第 ' + view.trickNo + ' 轮 · ' + (view.myTurn ? '轮到你出牌' : '等 ' + turnName + ' 出牌');
+  $('seats').innerHTML = view.seats.map(function (s) {
+    return '<div class="seat ' + (s.seat === view.turn ? 'active' : '') + '">' +
+      '<div class="n">' + esc(s.name) + (s.isHuman ? ' (你)' : '') + '</div>' +
+      '<div class="c">手牌 ' + s.handCount + ' 张 · 收牌堆 ' + s.pileCount + ' 张</div></div>';
+  }).join('');
+  // 本轮出的牌
+  var trick = view.trick || [];
+  var slots = [];
+  for (var i = 0; i < 4; i++) {
+    var p = trick[i];
+    slots.push('<div class="slot"><div class="who">' + (p ? esc(p.name) : '·') + '</div>' + (p ? cardHtml(p.card) : '<div class="card back"></div>') + '</div>');
+  }
+  $('trick').innerHTML = slots.join('');
+  // 亮牌面板
+  $('declare').style.display = view.canDeclare ? 'block' : 'none';
+  if (view.canDeclare) {
+    var specials = view.hand.filter(function (c) { return c.special; });
+    $('picks').innerHTML = specials.length ? specials.map(function (c) {
+      return '<div class="pick ' + (picks.has(c.id) ? 'on' : '') + '" data-id="' + c.id + '">' + c.text + '</div>';
+    }).join('') : '<span style="color:var(--dim)">你手里没有特殊牌,直接开始即可</span>';
+    Array.prototype.forEach.call(document.querySelectorAll('.pick'), function (el) {
+      el.onclick = function () {
+        var id = el.getAttribute('data-id');
+        if (picks.has(id)) picks.delete(id); else picks.add(id);
+        render();
+      };
+    });
+  }
+  // 手牌
+  $('hand').innerHTML = view.hand.map(function (c) {
+    var legal = view.legalIds.indexOf(c.id) >= 0;
+    var cls = view.myTurn ? (legal ? 'legal' : 'illegal') : '';
+    return cardHtml(c, cls);
+  }).join('');
+  if (view.myTurn) {
+    Array.prototype.forEach.call(document.querySelectorAll('#hand .card.legal'), function (el) {
+      el.onclick = function () { playCard(el.getAttribute('data-id')); };
+    });
+  }
+  // 结算
+  if (view.phase === 'over' && view.score) {
+    $('score').style.display = 'block';
+    var rows = view.score.perSeat.map(function (p) {
+      return '<tr><td>' + esc(p.name) + '</td><td class="' + (p.personal >= 0 ? 'pos' : 'neg') + '">' + p.personal + '</td><td class="' + (p.final >= 0 ? 'pos' : 'neg') + '"><b>' + p.final + '</b></td>' +
+        '<td>' + (p.full16 ? '✓ 原16' : '') + '</td><td>' + (p.allRed ? '✓ 全红' : '') + '</td><td style="font-size:12px;color:var(--dim)">' + esc((p.invalidated || []).join(', ')) + '</td></tr>';
+    }).join('');
+    $('score').innerHTML = '<b>本局结算</b>(最终 = 个人×3 − 其余三家个人和)' +
+      '<table style="margin-top:8px"><tr><th>座位</th><th>个人分</th><th>最终得分</th><th>原16</th><th>全红</th><th>被砍条目</th></tr>' + rows + '</table>' +
+      '<div style="margin-top:6px;color:var(--dim);font-size:12px">未定项:' + esc((view.score.ambiguities || []).join(' / ') || '无 ✓') + '</div>' +
+      '<div id="ledger">' + esc((view.score.ledger || []).join('\n')) + '</div>';
+  } else {
+    $('score').style.display = 'none';
+  }
+}
+
+function refresh() {
+  return api('/api/zhupig/state?seat=' + seat).then(function (r) {
+    if (!r.ok) { toast(r.error || '读取失败'); return; }
+    view = r.view; render();
+  });
+}
+
+function autoStep() {
+  if (busy) return Promise.resolve();
+  if (!view || view.phase !== 'play' || view.myTurn || view.over) return Promise.resolve();
+  busy = true;
+  return api('/api/zhupig/step', { seat: seat }).then(function (r) {
+    busy = false;
+    if (!r.ok) { toast(r.error || 'AI 出错'); return; }
+    view = r.view; render();
+    return new Promise(function (res) { setTimeout(res, 120); }).then(autoStep);
+  });
+}
+
+function playCard(id) {
+  api('/api/zhupig/action', { seat: seat, cardId: id }).then(function (r) {
+    if (!r.ok) { toast(r.error || '出牌失败'); return; }
+    view = r.view; render(); return autoStep();
+  });
+}
+
+$('newBtn').onclick = function () {
+  picks.clear();
+  api('/api/zhupig/new', { seat: seat }).then(function (r) {
+    if (!r.ok) { toast(r.error || '开局失败'); return; }
+    view = r.view; render(); toast('已发牌:先决定要不要亮牌');
+  });
+};
+
+$('startBtn').onclick = function () {
+  api('/api/zhupig/declare', { seat: seat, cardIds: Array.from(picks) }).then(function (r) {
+    if (!r.ok) { toast(r.error || '亮牌失败'); return; }
+    view = r.view; render(); toast('开始!♦3 持有者先出');
+    return autoStep();
+  });
+};
+
+// 进入页面:先开一局
+$('newBtn').click();
+</script>
+</body>
+</html>
